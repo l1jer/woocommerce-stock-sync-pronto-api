@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with batch processing.
-Version: 1.1.2
+Version: 1.1.3
 Author: Jerry Li
 */
 
@@ -102,4 +102,71 @@ function wcap_sort_custom_column($query)
     }
 }
 add_action('pre_get_posts', 'wcap_sort_custom_column');
-?>
+
+// Add Stock Sync Status page in the admin menu
+function wcap_add_admin_menu()
+{
+    add_submenu_page(
+        'edit.php?post_type=product',
+        __('Stock Sync Status', 'woocommerce'),
+        __('Stock Sync Status', 'woocommerce'),
+        'manage_options',
+        'wcap-stock-sync-status',
+        'wcap_render_stock_sync_status_page'
+    );
+}
+add_action('admin_menu', 'wcap_add_admin_menu');
+
+// Render Stock Sync Status page
+function wcap_render_stock_sync_status_page()
+{
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e('Stock Sync Status', 'woocommerce'); ?></h1>
+        <form method="get" action="">
+            <input type="hidden" name="post_type" value="product">
+            <input type="hidden" name="page" value="wcap-stock-sync-status">
+            <select name="error_category" onchange="this.form.submit();">
+                <option value="all"><?php esc_html_e('All', 'woocommerce'); ?></option>
+                <option value="json_decode_error"><?php esc_html_e('JSON Decode Error', 'woocommerce'); ?></option>
+                <option value="api_request_error"><?php esc_html_e('API Request Error', 'woocommerce'); ?></option>
+                <option value="stock_update_error"><?php esc_html_e('Stock Update Error', 'woocommerce'); ?></option>
+                <option value="other"><?php esc_html_e('Other', 'woocommerce'); ?></option>
+            </select>
+        </form>
+        <table class="widefat fixed">
+            <thead>
+                <tr>
+                    <th><?php esc_html_e('Date', 'woocommerce'); ?></th>
+                    <th><?php esc_html_e('Error Message', 'woocommerce'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $logs = get_option('wcap_error_logs', array());
+                $category = isset($_GET['error_category']) ? sanitize_text_field($_GET['error_category']) : 'all';
+                foreach ($logs as $log) {
+                    if ($category === 'all' || strpos($log['message'], $category) !== false) {
+                        echo '<tr>';
+                        echo '<td>' . esc_html($log['date']) . '</td>';
+                        echo '<td>' . esc_html($log['message']) . '</td>';
+                        echo '</tr>';
+                    }
+                }
+                ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
+}
+
+// Log errors to the database
+function wcap_log_error($message)
+{
+    $logs = get_option('wcap_error_logs', array());
+    $logs[] = array(
+        'date' => current_time('mysql'),
+        'message' => $message,
+    );
+    update_option('wcap_error_logs', $logs);
+}

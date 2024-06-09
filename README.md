@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.1
+**Stable tag:** 1.1.3
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -19,6 +19,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Handles large product catalogs and respects API rate limits with batch processing.
 * Updates stock levels daily at 2 AM.
 * Logs detailed debug information for troubleshooting.
+* Adds a Stock Sync Status page to view sync status and details about out-of-stock products and SKUs not found.
 
 ## Installation
 
@@ -52,7 +53,18 @@ The plugin processes stock updates in batches, updating a specified number of pr
 
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
+### What is the Stock Sync Status page?
+
+The Stock Sync Status page displays a summary of out-of-stock products and SKUs not found during the last sync process.
+
 ## Changelog
+
+### 1.1.3
+* Added "Stock Sync Status" page to display error logs with category filters.
+* Modified batch event scheduling to align with the next server CRON job.
+* Enhanced plugin to update stock levels for product variations as well.
+* Fixed the issue where stock quantities were set to negative values.
+* Adjusted column width for "Avenue Stock Sync" to fit content.
 
 ### 1.1.2
 * Fixed the issue with sorting functionality for the "Avenue Stock Sync" column.
@@ -62,7 +74,6 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 * Added get_product_data method to the API handler class.
 * Set stock quantity to 0 if it is negative.
 * Positioned "Avenue Stock Sync" column between "Stock" and "Price."
-* Changed "No sync info" to "N/A."
 
 ### 1.1
 * Added a new column "Avenue Stock Sync" to display the last sync date and time.
@@ -98,6 +109,15 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 * Handle API rate limits and server execution time constraints.
 
 ## Upgrade Notice
+
+### 1.1.3
+Added "Stock Sync Status" page to display error logs with category filters. Modified batch event scheduling to align with the next server CRON job. Enhanced plugin to update stock levels for product variations as well. Fixed the issue where stock quantities were set to negative values. Adjusted column width for "Avenue Stock Sync" to fit content.
+
+### 1.1.2
+Fixed the issue with sorting functionality for the "Avenue Stock Sync" column.
+
+### 1.1.1
+Added get_product_data method to the API handler class. Set stock quantity to 0 if it is negative. Positioned "Avenue Stock Sync" column between "Stock" and "Price."
 
 ### 1.1
 Added a new column "Avenue Stock Sync" to display the last sync date and time. Changed "No sync info" to "N/A". Ensured stock quantity is updated to 0 if it is negative. Improved column width handling to fit the content dynamically. Removed settings page as there are no options to configure anymore. Updated the cron schedule to run once daily at 2 AM. Added uninstall.php file to clean up options on uninstall. Added config.php file to store API credentials securely.

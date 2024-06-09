@@ -32,6 +32,7 @@ function wcap_uninstall_plugin()
     delete_option('wcap_paused_events');
     delete_option('wcap_batch_offset');
     delete_option('wcap_cron_frequency');
+    delete_option('wcap_error_logs');
 }
 
 // Execute the uninstall function
