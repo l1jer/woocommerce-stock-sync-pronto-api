@@ -5,7 +5,7 @@
  *
  * Tasks:
  * 1. Reschedules paused events
- * 2. Removes wcap_* options from wp_options
+ * 2. Removes wc_sspaa_* options from wp_options
  *
  * @package woocommerce-stock-sync-api
  */
@@ -17,10 +17,10 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 /**
  * Reschedule paused events and remove options
  */
-function wcap_uninstall_plugin()
+function wc_sspaa_uninstall_plugin()
 {
     // 1. Reschedule paused events
-    $paused_events = get_option('wcap_paused_events', array());
+    $paused_events = get_option('wc_sspaa_paused_events', array());
 
     foreach ($paused_events as $event) {
         if (!empty($event['hook'])) {
@@ -28,13 +28,12 @@ function wcap_uninstall_plugin()
         }
     }
 
-    // 2. Remove wcap_* options from wp_options
-    delete_option('wcap_paused_events');
-    delete_option('wcap_batch_offset');
-    delete_option('wcap_cron_frequency');
-    delete_option('wcap_error_logs');
+    // 2. Remove wc_sspaa_* options from wp_options
+    delete_option('wc_sspaa_paused_events');
+    delete_option('wc_sspaa_batch_offset');
+    delete_option('wc_sspaa_cron_frequency');
 }
 
 // Execute the uninstall function
-wcap_uninstall_plugin();
+wc_sspaa_uninstall_plugin();
 ?>

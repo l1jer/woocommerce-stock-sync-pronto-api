@@ -1,22 +1,42 @@
 <?php
-class WCAP_API_Handler
+class WC_SSPAA_API_Handler
 {
+    private $api_url;
+    private $username;
+    private $password;
+
+    public function __construct()
+    {
+        $this->api_url = WCAP_API_URL;
+        $this->username = WCAP_API_USERNAME;
+        $this->password = WCAP_API_PASSWORD;
+    }
+
     public function get_product_data($sku)
     {
-        $url = WCAP_API_URL . '?code=' . urlencode($sku);
-        $args = array(
+        $url = $this->api_url . '?code=' . urlencode($sku);
+
+        $response = wp_remote_get($url, array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode(WCAP_API_USERNAME . ':' . WCAP_API_PASSWORD),
-            ),
+                'Authorization' => 'Basic ' . base64_encode($this->username . ':' . $this->password)
+            )
+        )
         );
 
-        $response = wp_remote_get($url, $args);
-
         if (is_wp_error($response)) {
-            wcap_log_error("API request error for SKU: $sku. Error: " . $response->get_error_message());
+            wc_sspaa_log('API request failed: ' . $response->get_error_message());
+            return null;
         }
 
-        return $response;
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wc_sspaa_log('JSON decode error: ' . json_last_error_msg());
+            return null;
+        }
+
+        return $data;
     }
 }
 ?>
