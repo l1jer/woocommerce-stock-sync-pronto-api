@@ -54,7 +54,12 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 ## Changelog
 
+### 1.1.5
+* Ensured batch processes are not scheduled multiple times if they already exist.
+* Disable debug error message
+
 ### 1.1.4
+* Scheduled batch processes at specific times of the day when the plugin is activated.
 * Excluded specific SKUs from the stock sync process.
 * Fixed the issue with duplicate dates displayed in the Avenue Stock Sync column.
 * Enhanced logging to include timestamps and detailed information.
