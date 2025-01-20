@@ -8,63 +8,6 @@ class WC_SSPAA_Stock_Updater
     private $pause_duration;
     private $batch_size;
     private $execution_time_limit;
-    private $excluded_skus = [
-        'ZTC-T1LG-S',
-        'ZTC-T1LG-M',
-        'ZTC-T1LG-L',
-        'ZTC-T1LG-XL',
-        'ZTC-T1LG-2XL',
-        'ZTC-T1DG-S',
-        'ZTC-T1DG-M',
-        'ZTC-T1DG-L',
-        'ZTC-T1DG-XL',
-        'ZTC-T1DG-2XL',
-        'ZTC-T1OG-S',
-        'ZTC-T1OG-M',
-        'ZTC-T1OG-L',
-        'ZTC-T1OG-XL',
-        'ZTC-T1OG-2XL',
-        'ZTC-T1N-S',
-        'ZTC-T1N-M',
-        'ZTC-T1N-L',
-        'ZTC-T1N-XL',
-        'ZTC-T1N-2XL',
-        'ZTC-T2N-S',
-        'ZTC-T2N-M',
-        'ZTC-T2N-L',
-        'ZTC-T2N-XL',
-        'ZTC-T2N-2XL',
-        'ZTC-T2LG-S',
-        'ZTC-T2LG-M',
-        'ZTC-T2LG-L',
-        'ZTC-T2LG-XL',
-        'ZTC-T2LG-2XL',
-        'ZTC-T2DG-S',
-        'ZTC-T2DG-M',
-        'ZTC-T2DG-L',
-        'ZTC-T2DG-XL',
-        'ZTC-T2DG-2XL',
-        'ZTC-T2OG-S',
-        'ZTC-T2OG-M',
-        'ZTC-T2OG-L',
-        'ZTC-T2OG-XL',
-        'ZTC-T2OG-2XL',
-        'ZTC-HDG-S',
-        'ZTC-HDG-M',
-        'ZTC-HDG-L',
-        'ZTC-HDG-XL',
-        'ZTC-HDG-2XL',
-        'ZTC-TLS1G-S',
-        'ZTC-TLS1G-M',
-        'ZTC-TLS1G-L',
-        'ZTC-TLS1G-XL',
-        'ZTC-TLS1G-2XL',
-        'ZTC-TLS1OG-S',
-        'ZTC-TLS1OG-M',
-        'ZTC-TLS1OG-L',
-        'ZTC-TLS1OG-XL',
-        'ZTC-TLS1OG-2XL',
-    ];
     private $enable_debug;
 
     public function __construct($api_handler, $delay, $burst_limit, $pause_duration, $batch_size, $execution_time_limit, $enable_debug = true)
@@ -94,7 +37,7 @@ class WC_SSPAA_Stock_Updater
             )
         );
 
-        $this->log('Number of products fetched: '.count($products));
+        $this->log('Number of products fetched: ' . count($products));
 
         foreach ($products as $product) {
             $sku = $product->sku;
@@ -105,16 +48,10 @@ class WC_SSPAA_Stock_Updater
                 continue;
             }
 
-            // Exclude specific SKUs
-            if (in_array($sku, $this->excluded_skus)) {
-                $this->log('Skipping excluded SKU: '.$sku);
-                continue;
-            }
-
-            $this->log('Fetching product data for SKU: '.$sku);
+            $this->log('Fetching product data for SKU: ' . $sku);
 
             $response = $this->api_handler->get_product_data($sku);
-            $this->log('Raw API response for SKU '.$sku.': '.json_encode($response));
+            $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
 
             if (isset($response['products']) && !empty($response['products'])) {
                 $product_data = $response['products'][0];
@@ -131,7 +68,7 @@ class WC_SSPAA_Stock_Updater
                     $quantity = 0;
                 }
 
-                $this->log('Updating stock for SKU: '.$sku.' with quantity: '.$quantity);
+                $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
 
                 // Update stock quantity
                 update_post_meta($product_id, '_stock', $quantity);
@@ -139,13 +76,13 @@ class WC_SSPAA_Stock_Updater
 
                 // Save last sync time
                 $current_time = current_time('mysql');
-                $this->log('Saving last sync time: '.$current_time.' for product ID: '.$product_id);
+                $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
 
                 // Throttle the requests to respect the rate limit
                 usleep($this->delay);
             } else {
-                $this->log('No product data found for SKU: '.$sku);
+                $this->log('No product data found for SKU: ' . $sku);
             }
         }
 
@@ -169,7 +106,7 @@ class WC_SSPAA_Stock_Updater
     {
         if ($this->enable_debug) {
             $timestamp = date('Y-m-d H:i:s');
-            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__).'../debug.log');
+            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__) . '../debug.log');
         }
     }
 }
