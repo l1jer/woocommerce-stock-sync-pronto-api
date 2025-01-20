@@ -1,4 +1,5 @@
 <?php
+
 class WC_SSPAA_Stock_Updater
 {
     private $api_handler;
@@ -7,8 +8,7 @@ class WC_SSPAA_Stock_Updater
     private $pause_duration;
     private $batch_size;
     private $execution_time_limit;
-    private $excluded_skus = array(
-        'TRAE28',
+    private $excluded_skus = [
         'ZTC-T1LG-S',
         'ZTC-T1LG-M',
         'ZTC-T1LG-L',
@@ -63,8 +63,8 @@ class WC_SSPAA_Stock_Updater
         'ZTC-TLS1OG-M',
         'ZTC-TLS1OG-L',
         'ZTC-TLS1OG-XL',
-        'ZTC-TLS1OG-2XL'
-    );
+        'ZTC-TLS1OG-2XL',
+    ];
     private $enable_debug;
 
     public function __construct($api_handler, $delay, $burst_limit, $pause_duration, $batch_size, $execution_time_limit, $enable_debug = true)
@@ -94,7 +94,7 @@ class WC_SSPAA_Stock_Updater
             )
         );
 
-        $this->log('Number of products fetched: ' . count($products));
+        $this->log('Number of products fetched: '.count($products));
 
         foreach ($products as $product) {
             $sku = $product->sku;
@@ -107,14 +107,14 @@ class WC_SSPAA_Stock_Updater
 
             // Exclude specific SKUs
             if (in_array($sku, $this->excluded_skus)) {
-                $this->log('Skipping excluded SKU: ' . $sku);
+                $this->log('Skipping excluded SKU: '.$sku);
                 continue;
             }
 
-            $this->log('Fetching product data for SKU: ' . $sku);
+            $this->log('Fetching product data for SKU: '.$sku);
 
             $response = $this->api_handler->get_product_data($sku);
-            $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
+            $this->log('Raw API response for SKU '.$sku.': '.json_encode($response));
 
             if (isset($response['products']) && !empty($response['products'])) {
                 $product_data = $response['products'][0];
@@ -131,7 +131,7 @@ class WC_SSPAA_Stock_Updater
                     $quantity = 0;
                 }
 
-                $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
+                $this->log('Updating stock for SKU: '.$sku.' with quantity: '.$quantity);
 
                 // Update stock quantity
                 update_post_meta($product_id, '_stock', $quantity);
@@ -139,13 +139,13 @@ class WC_SSPAA_Stock_Updater
 
                 // Save last sync time
                 $current_time = current_time('mysql');
-                $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
+                $this->log('Saving last sync time: '.$current_time.' for product ID: '.$product_id);
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
 
                 // Throttle the requests to respect the rate limit
                 usleep($this->delay);
             } else {
-                $this->log('No product data found for SKU: ' . $sku);
+                $this->log('No product data found for SKU: '.$sku);
             }
         }
 
@@ -168,9 +168,8 @@ class WC_SSPAA_Stock_Updater
     private function log($message)
     {
         if ($this->enable_debug) {
-            $timestamp = date("Y-m-d H:i:s");
-            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__) . '../debug.log');
+            $timestamp = date('Y-m-d H:i:s');
+            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__).'../debug.log');
         }
     }
 }
-?>
