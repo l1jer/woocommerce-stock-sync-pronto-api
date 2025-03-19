@@ -38,6 +38,8 @@ class WC_SSPAA_Stock_Updater
         );
 
         $this->log('Number of products fetched: ' . count($products));
+        
+        $updated_count = 0;
 
         foreach ($products as $product) {
             $sku = $product->sku;
@@ -50,39 +52,8 @@ class WC_SSPAA_Stock_Updater
 
             $this->log('Fetching product data for SKU: ' . $sku);
 
-            $response = $this->api_handler->get_product_data($sku);
-            $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
-
-            if (isset($response['products']) && !empty($response['products'])) {
-                $product_data = $response['products'][0];
-                $quantity = 0;
-
-                foreach ($product_data['inventory_quantities'] as $inventory) {
-                    if ($inventory['warehouse'] === '1') {
-                        $quantity = floatval($inventory['quantity']);
-                        break;
-                    }
-                }
-
-                if ($quantity < 0) {
-                    $quantity = 0;
-                }
-
-                $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
-
-                // Update stock quantity
-                update_post_meta($product_id, '_stock', $quantity);
-                wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
-
-                // Save last sync time
-                $current_time = current_time('mysql');
-                $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
-                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-
-                // Throttle the requests to respect the rate limit
-                usleep($this->delay);
-            } else {
-                $this->log('No product data found for SKU: ' . $sku);
+            if ($this->sync_product_stock($product_id, $sku)) {
+                $updated_count++;
             }
         }
 
@@ -98,8 +69,110 @@ class WC_SSPAA_Stock_Updater
             )
         );
 
-        // Ensure batch processes are not scheduled multiple times if they already exist.
-        // Removed scheduling of next batch to prevent multiple events
+        // Return count of updated products
+        return $updated_count;
+    }
+    
+    /**
+     * Sync a single product by ID and SKU
+     *
+     * @param int $product_id The product ID
+     * @param string $sku The product SKU
+     * @return bool True if stock was updated, false if unchanged
+     */
+    public function sync_single_product($product_id, $sku)
+    {
+        if (empty($sku)) {
+            $this->log('Cannot sync product with empty SKU.');
+            return false;
+        }
+        
+        return $this->sync_product_stock($product_id, $sku);
+    }
+    
+    /**
+     * Sync product stock from API
+     *
+     * @param int $product_id The product ID
+     * @param string $sku The product SKU
+     * @return mixed True if stock was updated, false if unchanged, 'obsolete' if product not found in API
+     */
+    private function sync_product_stock($product_id, $sku)
+    {
+        $response = $this->api_handler->get_product_data($sku);
+        $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
+
+        if (isset($response['products']) && !empty($response['products'])) {
+            $product_data = $response['products'][0];
+            $quantity = 0;
+
+            foreach ($product_data['inventory_quantities'] as $inventory) {
+                if ($inventory['warehouse'] === '1') {
+                    $quantity = floatval($inventory['quantity']);
+                    break;
+                }
+            }
+
+            if ($quantity < 0) {
+                $quantity = 0;
+            }
+
+            $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
+
+            // Get current stock before update
+            $current_stock = get_post_meta($product_id, '_stock', true);
+            
+            // Update stock quantity
+            update_post_meta($product_id, '_stock', $quantity);
+            update_post_meta($product_id, '_wc_sspaa_stock_value', $quantity); // Store stock value for display
+            update_post_meta($product_id, '_wc_sspaa_is_obsolete', 'no'); // Mark as not obsolete
+            wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
+
+            // Save last sync time
+            $current_time = current_time('mysql');
+            $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
+            update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+            
+            // Count only if stock actually changed
+            if ($current_stock !== '' . $quantity) {
+                $this->log('Stock updated for product ID: ' . $product_id . ' from ' . $current_stock . ' to ' . $quantity);
+                
+                // Throttle the requests to respect the rate limit
+                usleep($this->delay);
+                
+                return true;
+            } else {
+                $this->log('Stock unchanged for product ID: ' . $product_id . ' (remains at ' . $quantity . ')');
+                
+                // Throttle the requests to respect the rate limit
+                usleep($this->delay);
+                
+                return false;
+            }
+        } else {
+            $this->log('No product data found for SKU: ' . $sku . ' - marking as obsolete and setting stock to 0');
+            
+            // Get current stock before update
+            $current_stock = get_post_meta($product_id, '_stock', true);
+            
+            // Set stock to 0 for obsolete products
+            update_post_meta($product_id, '_stock', 0);
+            update_post_meta($product_id, '_wc_sspaa_stock_value', 0);
+            update_post_meta($product_id, '_wc_sspaa_is_obsolete', 'yes');
+            wc_update_product_stock_status($product_id, 'outofstock');
+            
+            // Save last sync time
+            $current_time = current_time('mysql');
+            update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+            
+            $this->log('Stock set to 0 for obsolete product ID: ' . $product_id);
+            
+            // Throttle the requests to respect the rate limit
+            usleep($this->delay);
+            
+            // Return true if stock was changed, false if it was already 0
+            return $current_stock !== '0' ? true : 'obsolete';
+        }
     }
 
     private function log($message)

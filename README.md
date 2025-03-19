@@ -6,7 +6,7 @@
 **Requires PHP:** 5.3
 **Tested up to:** 6.7.2
 **WC tested up to:** 9.6
-**Stable tag:** 1.1.6
+**Stable tag:** 1.1.7
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -20,7 +20,8 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Handles large product catalogs and respects API rate limits with batch processing.
 * Updates stock levels daily at 1 AM except on weekends.
 * Logs detailed debug information for troubleshooting.
-* Manual sync button for immediate stock synchronization.
+* Individual product sync buttons for per-product synchronization.
+* Shows current stock level and marks obsolete products automatically.
 
 ## Installation
 
@@ -54,11 +55,24 @@ The plugin dynamically counts the total number of products and processes them in
 
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
-### Can I manually trigger the sync process?
+### Can I manually sync individual products?
 
-Yes, a manual sync button is available on the Products listing page, allowing you to trigger the synchronization process immediately when needed.
+Yes, each product now has its own "Sync Stock" button in the "Avenue Stock Sync" column. This allows you to sync individual products on demand without having to run a full synchronization.
+
+### How do I know if a product is obsolete?
+
+Products not found in the API will be marked as "Obsolete Stock" and have their stock set to 0 automatically. This helps identify products that are no longer available from the supplier.
 
 ## Changelog
+
+### 1.1.7
+* Replaced global sync button with individual sync buttons for each product
+* Added display of current stock quantity below the sync date/time
+* Added "Obsolete Stock" indicator for products not found in API
+* Set stock to 0 for obsolete products automatically
+* Improved visual feedback during sync process
+* Enhanced logging for better troubleshooting
+* Fixed PHP syntax errors in string interpolation
 
 ### 1.1.6
 * Replaced scheduled batch processing with dynamic product counting and batch processing

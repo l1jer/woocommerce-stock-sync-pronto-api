@@ -1,2 +1,79 @@
+# Ignore WordPress core files
+wp-admin/
+wp-includes/
+wp-content/plugins/index.php
+wp-content/themes/index.php
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/
+wp-content/index.php
+
+# Ignore WordPress config files
+wp-config.php
+wp-config-sample.php
+.htaccess
+.htaccess.bak
+.maintenance
+
+# Ignore node dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+
+# Ignore OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# Ignore IDE and editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.komodoproject
+.komodotools
+*.esproj
+*.tmproj
+*.tmproject
+tmtags
+nbproject/
+
+# Ignore log files and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Ignore compressed files
+*.zip
+*.gz
+*.tar
+*.rar
+
+# Ignore custom files and directories
+.env
+.env.*
+.svn
+.cvs
+*.bak
+*.swp
+
+# Cursor rules
+.cursor/
+.cursorignore
+.cursorrules
+
+# Plugin-specific ignores
 includes/config.php
+debug.log
