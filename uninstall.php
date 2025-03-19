@@ -6,6 +6,7 @@
  * Tasks:
  * 1. Reschedules paused events
  * 2. Removes wc_sspaa_* options from wp_options
+ * 3. Clears scheduled hooks
  *
  * @package woocommerce-stock-sync-api
  */
@@ -32,6 +33,9 @@ function wc_sspaa_uninstall_plugin()
     delete_option('wc_sspaa_paused_events');
     delete_option('wc_sspaa_batch_offset');
     delete_option('wc_sspaa_cron_frequency');
+    
+    // 3. Clear scheduled hooks
+    wp_clear_scheduled_hook('wc_sspaa_daily_stock_sync');
 }
 
 // Execute the uninstall function

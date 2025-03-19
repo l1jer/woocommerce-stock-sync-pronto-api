@@ -4,8 +4,9 @@
 **Tags:** WooCommerce, stock, API, cron
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
-**Tested up to:** 6.4
-**Stable tag:** 1.1.4
+**Tested up to:** 6.7.2
+**WC tested up to:** 9.6
+**Stable tag:** 1.1.6
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -13,12 +14,13 @@ Synchronize your WooCommerce product stock levels with an external API seamlessl
 
 ## Description
 
-WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. Here’s what it does:
+WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. Here's what it does:
 
 * Fetches all product data from the external API and updates WooCommerce stock levels.
 * Handles large product catalogs and respects API rate limits with batch processing.
-* Updates stock levels daily at 2 AM.
+* Updates stock levels daily at 1 AM except on weekends.
 * Logs detailed debug information for troubleshooting.
+* Manual sync button for immediate stock synchronization.
 
 ## Installation
 
@@ -42,17 +44,28 @@ The plugin fetches product data from the external API and processes it in batche
 
 ### How often does the plugin fetch data from the API?
 
-The plugin is scheduled to fetch data from the API daily at 2 AM.
+The plugin is scheduled to fetch data from the API daily at 1 AM, except on weekends (Saturday and Sunday).
 
 ### How does the batch processing work?
 
-The plugin processes stock updates in batches, updating a specified number of products in each batch. This ensures that the server execution time limits are not exceeded. If the execution time limit is reached, the plugin schedules the next batch to continue processing.
+The plugin dynamically counts the total number of products and processes them in batches of 15 products each. This ensures that the server execution time limits are not exceeded while maintaining efficient processing.
 
 ### What happens if a product's stock quantity is negative?
 
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
+### Can I manually trigger the sync process?
+
+Yes, a manual sync button is available on the Products listing page, allowing you to trigger the synchronization process immediately when needed.
+
 ## Changelog
+
+### 1.1.6
+* Replaced scheduled batch processing with dynamic product counting and batch processing
+* Added manual sync button to product listing page
+* Changed schedule to run once daily at 1 AM except on weekends (Saturday and Sunday)
+* Improved overall performance and reduced server load
+* Tested with PHP 8.2+, WordPress 6.7.2, and WooCommerce 9.6+
 
 ### 1.1.5
 * Ensured batch processes are not scheduled multiple times if they already exist.
