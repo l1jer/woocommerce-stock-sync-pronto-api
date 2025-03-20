@@ -6,7 +6,7 @@
 **Requires PHP:** 5.3
 **Tested up to:** 6.7.2
 **WC tested up to:** 9.6
-**Stable tag:** 1.1.7
+**Stable tag:** 1.1.8
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -22,6 +22,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Logs detailed debug information for troubleshooting.
 * Individual product sync buttons for per-product synchronization.
 * Shows current stock level and marks obsolete products automatically.
+* Bulk sync button on products listing page with real-time progress tracking.
 
 ## Installation
 
@@ -64,6 +65,16 @@ Yes, each product now has its own "Sync Stock" button in the "Avenue Stock Sync"
 Products not found in the API will be marked as "Obsolete Stock" and have their stock set to 0 automatically. This helps identify products that are no longer available from the supplier.
 
 ## Changelog
+
+### 1.1.8
+* Added bulk sync button on products listing page with real-time progress tracking
+* Added WooCommerce HPOS (High-Performance Order Storage) compatibility
+* Added option to acknowledge real cron job usage to suppress WP-Cron warnings
+* Added individual product sync button on product edit page in inventory section
+* Improved scheduling stability for the 1AM daily sync
+* Enhanced cron monitoring with detailed diagnostics and status checks
+* Added multiple UI improvements for better feedback during sync operations
+* Fixed PHP syntax error in string formatting for batch processing
 
 ### 1.1.7
 * Replaced global sync button with individual sync buttons for each product
