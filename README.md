@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.1.6
+**Stable tag:** 1.1.8
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -20,8 +20,9 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Dynamically calculates and schedules batches based on your total product count.
 * Allows configuration of sync start time in the Australia/Sydney timezone.
 * Updates stock levels at user-configurable times.
-* Logs detailed debug information for troubleshooting.
+* Provides individual "Sync Stock" buttons for each product.
 * Identifies obsolete stock items.
+* Logs detailed debug information for troubleshooting.
 
 ## Installation
 
@@ -56,6 +57,10 @@ The plugin counts your total products with SKUs and divides them into batches of
 
 Yes, you can set a custom start time under Products → Stock Sync Status. The time you enter is interpreted as Australia/Sydney timezone and automatically converted to UTC for scheduling.
 
+### How do I sync a single product?
+
+On the Products list page, each product has a "Sync Stock" button in the Avenue Stock Sync column. Click this button to immediately sync just that product's stock level.
+
 ### What happens if a product's stock quantity is negative?
 
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
@@ -64,7 +69,27 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 If the API returns a response indicating no product data ({"products":[],"count":0,"pages":0}), the plugin will display "Obsolete Stock" in red under the product's last sync time in the products list.
 
+### How can I enable detailed logging for troubleshooting?
+
+To enable detailed logging:
+1. Edit the main plugin file (`woocommerce-stock-sync-pronto-avenue-api.php`)
+2. Change `define('WC_SSPAA_DEBUG', false);` to `define('WC_SSPAA_DEBUG', true);`
+3. The plugin will create a `debug.log` file in the plugin's root directory with detailed information about all operations
+
 ## Changelog
+
+### 1.1.8
+* Enhanced debugging system with comprehensive logging
+* Added memory usage tracking to debug logs
+* Improved log organization with component prefixes (API, UPDATER, AJAX, etc.)
+* Added more detailed timing information for performance monitoring
+* Added statistics about product updates (updated, obsolete, skipped)
+
+### 1.1.7
+* Added "Sync Stock" button for each product in the Products list
+* Implemented AJAX functionality to sync individual products
+* Improved UI feedback when syncing stock
+* Enhanced obsolete stock detection and display
 
 ### 1.1.6
 * Implemented dynamic batching based on product quantity

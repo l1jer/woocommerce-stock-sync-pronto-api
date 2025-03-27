@@ -25,6 +25,9 @@ class WC_SSPAA_Stock_Updater
     {
         global $wpdb;
 
+        $this->log('Starting stock update batch with offset: ' . $offset);
+        $start_time = microtime(true);
+
         // Fetch products from WooCommerce with pagination
         $products = $wpdb->get_results(
             $wpdb->prepare(
@@ -39,16 +42,21 @@ class WC_SSPAA_Stock_Updater
 
         $this->log('Number of products fetched: ' . count($products));
 
+        $products_updated = 0;
+        $products_obsolete = 0;
+        $products_skipped = 0;
+
         foreach ($products as $product) {
             $sku = $product->sku;
             $product_id = $product->ID;
 
             if (empty($sku)) {
-                $this->log('Skipping product with empty SKU.');
+                $this->log('Skipping product ID ' . $product_id . ' with empty SKU.');
+                $products_skipped++;
                 continue;
             }
 
-            $this->log('Fetching product data for SKU: ' . $sku);
+            $this->log('Fetching product data for product ID: ' . $product_id . ' with SKU: ' . $sku);
 
             $response = $this->api_handler->get_product_data($sku);
             $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
@@ -72,7 +80,7 @@ class WC_SSPAA_Stock_Updater
                     $quantity = 0;
                 }
 
-                $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
+                $this->log('Updating stock for product ID: ' . $product_id . ' with SKU: ' . $sku . ' with quantity: ' . $quantity);
 
                 // Update stock quantity
                 update_post_meta($product_id, '_stock', $quantity);
@@ -82,17 +90,25 @@ class WC_SSPAA_Stock_Updater
                 $current_time = current_time('mysql');
                 $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+                
+                $products_updated++;
 
                 // Throttle the requests to respect the rate limit
                 usleep($this->delay);
             } else {
-                $this->log('No product data found for SKU: ' . $sku);
+                $this->log('No product data found for product ID: ' . $product_id . ' with SKU: ' . $sku . ' - marking as obsolete stock');
                 
                 // Save last sync time even for obsolete stock
                 $current_time = current_time('mysql');
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+                
+                $products_obsolete++;
             }
         }
+
+        $execution_time = microtime(true) - $start_time;
+        $this->log('Batch processing completed in ' . round($execution_time, 2) . ' seconds.');
+        $this->log('Products updated: ' . $products_updated . ', Obsolete: ' . $products_obsolete . ', Skipped: ' . $products_skipped);
 
         $next_offset = $offset + $this->batch_size;
         $next_products = $wpdb->get_results(
@@ -105,16 +121,15 @@ class WC_SSPAA_Stock_Updater
                 $next_offset
             )
         );
-
-        // Ensure batch processes are not scheduled multiple times if they already exist.
-        // Removed scheduling of next batch to prevent multiple events
+        
+        $this->log('Next batch will process ' . count($next_products) . ' products with offset: ' . $next_offset);
     }
 
     private function log($message)
     {
         if ($this->enable_debug) {
-            $timestamp = date('Y-m-d H:i:s');
-            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__) . '../debug.log');
+            // Use the global logging function for consistency
+            wc_sspaa_log('UPDATER: ' . $message);
         }
     }
 }
