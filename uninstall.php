@@ -28,10 +28,26 @@ function wc_sspaa_uninstall_plugin()
         }
     }
 
+    // Clear all scheduled batch events
+    $cron = _get_cron_array();
+    if (!empty($cron)) {
+        foreach ($cron as $timestamp => $hooks) {
+            if (isset($hooks['wc_sspaa_update_stock_batch'])) {
+                foreach ($hooks['wc_sspaa_update_stock_batch'] as $key => $event) {
+                    if (isset($event['args'][0])) {
+                        $offset = $event['args'][0];
+                        wp_clear_scheduled_hook('wc_sspaa_update_stock_batch', array($offset));
+                    }
+                }
+            }
+        }
+    }
+
     // 2. Remove wc_sspaa_* options from wp_options
     delete_option('wc_sspaa_paused_events');
     delete_option('wc_sspaa_batch_offset');
     delete_option('wc_sspaa_cron_frequency');
+    delete_option('wc_sspaa_start_time');
 }
 
 // Execute the uninstall function

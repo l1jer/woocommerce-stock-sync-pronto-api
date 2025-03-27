@@ -52,6 +52,10 @@ class WC_SSPAA_Stock_Updater
 
             $response = $this->api_handler->get_product_data($sku);
             $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
+            
+            // Store API response for obsolete stock detection
+            $response_json = json_encode($response);
+            update_post_meta($product_id, '_wc_sspaa_api_response', $response_json);
 
             if (isset($response['products']) && !empty($response['products'])) {
                 $product_data = $response['products'][0];
@@ -83,6 +87,10 @@ class WC_SSPAA_Stock_Updater
                 usleep($this->delay);
             } else {
                 $this->log('No product data found for SKU: ' . $sku);
+                
+                // Save last sync time even for obsolete stock
+                $current_time = current_time('mysql');
+                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
             }
         }
 
