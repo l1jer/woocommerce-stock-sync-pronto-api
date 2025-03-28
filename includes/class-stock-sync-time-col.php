@@ -28,7 +28,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
             'wc-sspaa-admin-js',
             plugin_dir_url(dirname(__FILE__)) . 'assets/js/admin.js',
             array('jquery'),
-            '1.0',
+            WC_SSPAA_VERSION,
             true
         );
         
@@ -45,24 +45,13 @@ class WC_SSPAA_Stock_Sync_Time_Col
             )
         );
         
-        // Add inline CSS
-        $css = "
-            .wc-sspaa-sync-btn {
-                margin-top: 5px;
-                cursor: pointer;
-            }
-            .wc-sspaa-obsolete-stock {
-                color: red;
-                font-size: 12px;
-                margin-top: 3px;
-                display: block;
-            }
-            .wc-sspaa-syncing {
-                opacity: 0.6;
-                pointer-events: none;
-            }
-        ";
-        wp_add_inline_style('woocommerce_admin_styles', $css);
+        // Enqueue the standalone CSS file
+        wp_enqueue_style(
+            'wc-sspaa-admin-css',
+            plugin_dir_url(dirname(__FILE__)) . 'assets/css/admin.css',
+            array('woocommerce_admin_styles'),
+            WC_SSPAA_VERSION
+        );
     }
 
     public function add_custom_columns($columns)
@@ -85,15 +74,15 @@ class WC_SSPAA_Stock_Sync_Time_Col
             echo '<div class="wc-sspaa-sync-data" data-product-id="' . esc_attr($post_id) . '">';
             
             if ($last_sync) {
-                echo '<span class="wc-sspaa-sync-time" style="color: #999; white-space: nowrap;">' . esc_html($last_sync) . '</span>';
+                echo '<span class="wc-sspaa-sync-time">' . esc_html($last_sync) . '</span>';
                 
                 // Check for obsolete stock API response
                 $api_response = get_post_meta($post_id, '_wc_sspaa_api_response', true);
                 if ($api_response === '{"products":[],"count":0,"pages":0}') {
-                    echo '<span class="wc-sspaa-obsolete-stock">Obsolete Stock</span>';
+                    echo '<span class="wc-sspaa-obsolete-stock"><strong>Obsolete Stock</strong></span>';
                 }
             } else {
-                echo '<span class="wc-sspaa-sync-time" style="color: #999;">N/A</span>';
+                echo '<span class="wc-sspaa-sync-time">N/A</span>';
             }
             
             // Add sync button
@@ -129,8 +118,10 @@ class WC_SSPAA_Stock_Sync_Time_Col
         
         if ($post_type === 'product') {
             $url = admin_url('edit.php?post_type=product&page=wc-sspaa-settings');
-            echo '<a href="' . esc_url($url) . '" class="button" style="margin-right: 5px;">' . 
+            echo '<div class="wc-sspaa-toolbar-action">';
+            echo '<a href="' . esc_url($url) . '" class="button wc-sspaa-status-link">' . 
                 esc_html__('Stock Sync Status', 'woocommerce') . '</a>';
+            echo '</div>';
         }
     }
     
@@ -162,64 +153,99 @@ class WC_SSPAA_Stock_Sync_Time_Col
         
         wc_sspaa_log('AJAX: Processing single product sync for product ID: ' . $product_id . ' with SKU: ' . $sku);
         
-        // Initialize API handler
-        $api_handler = new WC_SSPAA_API_Handler();
+        // Create a temporary email notification instance for this single product sync
+        $email_notification = new WC_SSPAA_Email_Notification(WC_SSPAA_EMAIL_RECIPIENT);
+        $email_notification->start_sync(1, 1); // Just one product, one batch
         
-        // Get product data from API
-        $response = $api_handler->get_product_data($sku);
-        
-        // Store API response for obsolete stock detection
-        $response_json = json_encode($response);
-        update_post_meta($product_id, '_wc_sspaa_api_response', $response_json);
-        
-        wc_sspaa_log('AJAX: API response for SKU ' . $sku . ': ' . $response_json);
-        
-        // Save last sync time
-        $current_time = current_time('mysql');
-        update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-        
-        $is_obsolete = false;
-        
-        if (isset($response['products']) && !empty($response['products'])) {
-            $product_data = $response['products'][0];
-            $quantity = 0;
+        try {
+            // Initialize API handler
+            $api_handler = new WC_SSPAA_API_Handler();
             
-            foreach ($product_data['inventory_quantities'] as $inventory) {
-                if ($inventory['warehouse'] === '1') {
-                    $quantity = floatval($inventory['quantity']);
-                    break;
-                }
+            // Get product data from API
+            $response = $api_handler->get_product_data($sku);
+            
+            if ($response === null) {
+                $error_message = 'API returned null response';
+                wc_sspaa_log('AJAX: Error: ' . $error_message);
+                $email_notification->add_error($error_message, $sku, $product_id);
+                wp_send_json_error(array('message' => __('API Error: Could not retrieve data', 'woocommerce')));
+                return;
             }
             
-            if ($quantity < 0) {
+            // Store API response for obsolete stock detection
+            $response_json = json_encode($response);
+            update_post_meta($product_id, '_wc_sspaa_api_response', $response_json);
+            
+            wc_sspaa_log('AJAX: API response for SKU ' . $sku . ': ' . $response_json);
+            
+            // Save last sync time
+            $current_time = current_time('mysql');
+            update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+            
+            $is_obsolete = false;
+            
+            if (isset($response['products']) && !empty($response['products'])) {
+                $product_data = $response['products'][0];
                 $quantity = 0;
+                
+                foreach ($product_data['inventory_quantities'] as $inventory) {
+                    if ($inventory['warehouse'] === '1') {
+                        $quantity = floatval($inventory['quantity']);
+                        break;
+                    }
+                }
+                
+                if ($quantity < 0) {
+                    $quantity = 0;
+                }
+                
+                // Update stock quantity
+                update_post_meta($product_id, '_stock', $quantity);
+                wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
+                
+                wc_sspaa_log('AJAX: Updated stock for product ID ' . $product_id . ' with quantity: ' . $quantity);
+                
+                // Update email notification stats
+                $email_notification->update_batch_stats([
+                    'updated' => 1,
+                    'obsolete' => 0,
+                    'skipped' => 0,
+                    'errors' => []
+                ]);
+                
+                // Return success response
+                wp_send_json_success(array(
+                    'sync_time' => $current_time,
+                    'is_obsolete' => false,
+                    'quantity' => $quantity,
+                    'message' => sprintf(__('Stock updated to %d', 'woocommerce'), $quantity)
+                ));
+            } else {
+                // Mark as obsolete stock
+                $is_obsolete = true;
+                
+                wc_sspaa_log('AJAX: Product ID ' . $product_id . ' with SKU: ' . $sku . ' marked as obsolete stock');
+                
+                // Update email notification stats
+                $email_notification->update_batch_stats([
+                    'updated' => 0,
+                    'obsolete' => 1,
+                    'skipped' => 0,
+                    'errors' => []
+                ]);
+                
+                // Return success response with obsolete flag
+                wp_send_json_success(array(
+                    'sync_time' => $current_time,
+                    'is_obsolete' => true,
+                    'message' => __('Obsolete Stock', 'woocommerce')
+                ));
             }
-            
-            // Update stock quantity
-            update_post_meta($product_id, '_stock', $quantity);
-            wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
-            
-            wc_sspaa_log('AJAX: Updated stock for product ID ' . $product_id . ' with quantity: ' . $quantity);
-            
-            // Return success response
-            wp_send_json_success(array(
-                'sync_time' => $current_time,
-                'is_obsolete' => false,
-                'quantity' => $quantity,
-                'message' => sprintf(__('Stock updated to %d', 'woocommerce'), $quantity)
-            ));
-        } else {
-            // Mark as obsolete stock
-            $is_obsolete = true;
-            
-            wc_sspaa_log('AJAX: Product ID ' . $product_id . ' with SKU: ' . $sku . ' marked as obsolete stock');
-            
-            // Return success response with obsolete flag
-            wp_send_json_success(array(
-                'sync_time' => $current_time,
-                'is_obsolete' => true,
-                'message' => __('Obsolete Stock', 'woocommerce')
-            ));
+        } catch (Exception $e) {
+            $error_message = 'Exception during sync: ' . $e->getMessage();
+            wc_sspaa_log('AJAX: Error: ' . $error_message);
+            $email_notification->add_error($error_message, $sku, $product_id);
+            wp_send_json_error(array('message' => __('Sync error: ', 'woocommerce') . $e->getMessage()));
         }
     }
 }

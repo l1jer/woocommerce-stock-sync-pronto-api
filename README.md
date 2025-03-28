@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.1.8
+**Stable tag:** 1.1.9
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -22,6 +22,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Updates stock levels at user-configurable times.
 * Provides individual "Sync Stock" buttons for each product.
 * Identifies obsolete stock items.
+* Sends detailed email reports after sync completion.
 * Logs detailed debug information for troubleshooting.
 
 ## Installation
@@ -53,6 +54,15 @@ The plugin schedules batch processing based on your configured start time. By de
 
 The plugin counts your total products with SKUs and divides them into batches of 15 products each. These batches are processed at 30-minute intervals to respect API rate limits and server execution time constraints.
 
+### How do I get notified about the sync results?
+
+The plugin automatically sends an email report to jerry@tasco.com.au after the sync process completes. The email contains detailed statistics including:
+- Total number of products processed
+- Number of products updated
+- Number of obsolete products found
+- Any errors that occurred during the sync
+- Duration of the sync process
+
 ### Can I customize when the sync process starts?
 
 Yes, you can set a custom start time under Products → Stock Sync Status. The time you enter is interpreted as Australia/Sydney timezone and automatically converted to UTC for scheduling.
@@ -77,6 +87,13 @@ To enable detailed logging:
 3. The plugin will create a `debug.log` file in the plugin's root directory with detailed information about all operations
 
 ## Changelog
+
+### 1.1.9
+* Added email notification system that sends detailed reports after sync completion
+* Implemented tracking of sync progress across batches
+* Enhanced error handling and reporting in the email notifications
+* Added beautifully formatted HTML email reports with sync statistics
+* Added completion event scheduling to ensure reports are sent after all batches are processed
 
 ### 1.1.8
 * Enhanced debugging system with comprehensive logging

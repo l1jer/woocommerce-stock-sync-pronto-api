@@ -6,6 +6,7 @@
  * Tasks:
  * 1. Reschedules paused events
  * 2. Removes wc_sspaa_* options from wp_options
+ * 3. Removes transients
  *
  * @package woocommerce-stock-sync-api
  */
@@ -65,6 +66,33 @@ function wc_sspaa_uninstall_plugin()
     delete_option('wc_sspaa_batch_offset');
     delete_option('wc_sspaa_cron_frequency');
     delete_option('wc_sspaa_start_time');
+    delete_option('wc_sspaa_email_recipient');
+    
+    // 3. Remove transients
+    wc_sspaa_log('Removing plugin transients');
+    delete_transient('wc_sspaa_completed_batches');
+    delete_transient('wc_sspaa_current_sync_batch_count');
+    delete_transient('wc_sspaa_current_sync_total_products');
+    delete_transient('wc_sspaa_current_sync_start_time');
+    delete_transient('wc_sspaa_email_stats');
+    
+    // 4. Remove any saved email content files
+    $files_to_remove = array(
+        dirname(__FILE__) . '/email_content.html',
+    );
+    
+    // Look for any report files
+    $report_files = glob(dirname(__FILE__) . '/stock_sync_report_*.html');
+    if ($report_files) {
+        $files_to_remove = array_merge($files_to_remove, $report_files);
+    }
+    
+    foreach ($files_to_remove as $file) {
+        if (file_exists($file)) {
+            wc_sspaa_log('Removing file: ' . $file);
+            unlink($file);
+        }
+    }
     
     wc_sspaa_log('Uninstall process completed');
 }
