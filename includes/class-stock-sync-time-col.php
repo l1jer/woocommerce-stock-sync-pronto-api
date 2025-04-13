@@ -75,8 +75,6 @@ class WC_SSPAA_Stock_Sync_Time_Col
             return;
         }
         
-        wc_sspaa_log('Enqueuing admin scripts on hook: ' . $hook);
-        
         $js_path = '../assets/js/admin.js';
         $js_url = plugins_url($js_path, __FILE__);
         $js_file = plugin_dir_path(__FILE__) . $js_path;
@@ -85,8 +83,6 @@ class WC_SSPAA_Stock_Sync_Time_Col
             wc_sspaa_log('Error: Admin JS file not found at: ' . $js_file);
             return;
         }
-        
-        wc_sspaa_log('Loading admin JS from: ' . $js_url);
         
         wp_enqueue_script(
             'wc-sspaa-admin',
@@ -102,7 +98,6 @@ class WC_SSPAA_Stock_Sync_Time_Col
         );
         
         wp_localize_script('wc-sspaa-admin', 'wcSspaaAdmin', $script_data);
-        wc_sspaa_log('Localized script data: ' . json_encode($script_data));
         
         wp_add_inline_style('woocommerce_admin_styles', '
             .wc-sspaa-sync-container { position: relative; }

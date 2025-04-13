@@ -56,6 +56,7 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 ### 1.2.7
 * Remove additional logs.
+* Remove unnecessary debug logs from Stock Sync Time Column class.
 
 ### 1.2.6
 * Present the last synchronisation completion date and time in both UTC and Sydney time.
