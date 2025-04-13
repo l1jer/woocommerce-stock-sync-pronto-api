@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.1.4
+**Stable tag:** 1.2.7
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -13,7 +13,7 @@ Synchronize your WooCommerce product stock levels with an external API seamlessl
 
 ## Description
 
-WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. Here’s what it does:
+WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. Here's what it does:
 
 * Fetches all product data from the external API and updates WooCommerce stock levels.
 * Handles large product catalogs and respects API rate limits with batch processing.
@@ -53,6 +53,41 @@ The plugin processes stock updates in batches, updating a specified number of pr
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
 ## Changelog
+
+### 1.2.7
+* Remove additional logs.
+
+### 1.2.6
+* Present the last synchronisation completion date and time in both UTC and Sydney time.
+
+### 1.2.5
+* Display the date and time of the next scheduled batch in both UTC and Sydney time.
+
+### 1.2.4
+* Indicate the total number of batches involved in a complete stock synchronisation cycle.
+
+### 1.2.3
+* Show the total number of products that have SKUs.
+
+### 1.2.2
+* Implement an option to update the start time for the daily stock synchronisation (in Sydney time) with a Save Time button (formatted as hh:mm:ss), while also displaying the corresponding UTC date and time in a read-only format next to it.
+
+### 1.2.1
+* Display the current UTC time alongside the current AEST time, accounting for both daylight saving and non-daylight saving periods, also indicating if it is daylight saving or non-daylight saving period.
+
+### 1.2.0
+* Added new "Stock Sync Status" page under the Products tab
+* Added feature to display current UTC and AEST/AEDT time with DST status
+* Added option to update daily stock synchronization start time
+* Added display of total products with SKUs and total batches
+* Added display of next scheduled batch and last sync completion times
+* Improved batch scheduling system to use configurable start time
+
+### 1.1.8
+* Fixed dynamic batch calculation to properly account for all product types, including variable products
+* Added proper handling of parent-child relationships for variable products
+* Improved SQL queries for better performance and accuracy
+* Enhanced logging to provide more detailed information about product processing
 
 ### 1.1.5
 * Ensured batch processes are not scheduled multiple times if they already exist.

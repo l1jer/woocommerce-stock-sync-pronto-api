@@ -143,6 +143,13 @@ class WC_SSPAA_Stock_Sync_Time_Col
         }
         
         try {
+            // Get product information
+            $product_post = get_post($product_id);
+            $product_type = $product_post->post_type;
+            $parent_id = $product_post->post_parent;
+            
+            wc_sspaa_log("Product info - ID: {$product_id}, Type: {$product_type}, Parent ID: {$parent_id}");
+            
             $api_handler = new WC_SSPAA_API_Handler();
             wc_sspaa_log('Fetching product data from API for SKU: ' . $sku);
             
@@ -171,11 +178,17 @@ class WC_SSPAA_Stock_Sync_Time_Col
             
             wc_sspaa_log('Updating stock for product ID: ' . $product_id . ' to quantity: ' . $quantity);
             
+            // Update stock quantity
             update_post_meta($product_id, '_stock', $quantity);
             wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
             
             $current_time = current_time('mysql');
             update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+            
+            // If this is a variation, update the parent product stock
+            if ($product_type === 'product_variation' && $parent_id > 0) {
+                $this->update_parent_product_stock($parent_id);
+            }
             
             wc_sspaa_log('Successfully updated stock for product ID: ' . $product_id);
             
@@ -188,6 +201,60 @@ class WC_SSPAA_Stock_Sync_Time_Col
             wc_sspaa_log('Error syncing product ID: ' . $product_id . ' - ' . $e->getMessage());
             wp_send_json_error(array('message' => 'Error syncing product: ' . $e->getMessage()));
         }
+    }
+    
+    /**
+     * Update parent variable product stock status based on variations
+     *
+     * @param int $parent_id Parent product ID
+     */
+    private function update_parent_product_stock($parent_id)
+    {
+        global $wpdb;
+        
+        wc_sspaa_log("Updating stock for parent product ID: {$parent_id}");
+        
+        // Get all variations
+        $variations = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts} 
+                WHERE post_parent = %d AND post_type = 'product_variation'",
+                $parent_id
+            )
+        );
+        
+        if (empty($variations)) {
+            wc_sspaa_log("No variations found for parent product ID: {$parent_id}");
+            return;
+        }
+        
+        $total_stock = 0;
+        $has_stock = false;
+        
+        foreach ($variations as $variation) {
+            $variation_stock = get_post_meta($variation->ID, '_stock', true);
+            
+            if ($variation_stock === '') {
+                continue;
+            }
+            
+            $variation_stock = floatval($variation_stock);
+            $total_stock += $variation_stock;
+            
+            if ($variation_stock > 0) {
+                $has_stock = true;
+            }
+        }
+        
+        // Update parent product stock
+        update_post_meta($parent_id, '_stock', $total_stock);
+        wc_update_product_stock_status($parent_id, $has_stock ? 'instock' : 'outofstock');
+        
+        // Save last sync time for parent product
+        $current_time = current_time('mysql');
+        update_post_meta($parent_id, '_wc_sspaa_last_sync', $current_time);
+        
+        wc_sspaa_log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: " . ($has_stock ? 'instock' : 'outofstock'));
     }
 }
 

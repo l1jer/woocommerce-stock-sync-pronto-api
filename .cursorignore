@@ -1,3 +1,5 @@
-# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
 .DS_Store
-includes/config.php
+assets/.DS_Store
+assets/css/.DS_Store
+assets/js/.DS_Store
+includes/.DS_Store

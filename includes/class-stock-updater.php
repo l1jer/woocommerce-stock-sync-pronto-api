@@ -28,27 +28,42 @@ class WC_SSPAA_Stock_Updater
         // Fetch products from WooCommerce with pagination
         $products = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT ID, meta_value AS sku FROM {$wpdb->postmeta}
-            LEFT JOIN {$wpdb->posts} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id
-            WHERE meta_key='_sku' AND post_type IN ('product', 'product_variation')
-            ORDER BY ID ASC LIMIT %d OFFSET %d",
+                "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
+                FROM {$wpdb->postmeta} pm
+                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                WHERE pm.meta_key='_sku' 
+                AND p.post_type IN ('product', 'product_variation')
+                AND pm.meta_value != ''
+                ORDER BY p.ID ASC LIMIT %d OFFSET %d",
                 $this->batch_size,
                 $offset
             )
         );
 
         $this->log('Number of products fetched: ' . count($products));
+        $processed_products = array();
 
         foreach ($products as $product) {
             $sku = $product->sku;
             $product_id = $product->ID;
+            $product_type = $product->post_type;
+            $parent_id = $product->post_parent;
 
-            if (empty($sku)) {
-                $this->log('Skipping product with empty SKU.');
+            // Skip if already processed this product
+            if (in_array($product_id, $processed_products)) {
+                $this->log("Skipping already processed product ID: {$product_id}");
                 continue;
             }
 
-            $this->log('Fetching product data for SKU: ' . $sku);
+            // Add to processed products
+            $processed_products[] = $product_id;
+
+            if (empty($sku)) {
+                $this->log("Skipping product ID: {$product_id} with empty SKU.");
+                continue;
+            }
+
+            $this->log("Processing product ID: {$product_id}, Type: {$product_type}, Parent: {$parent_id}, SKU: {$sku}");
 
             $response = $this->api_handler->get_product_data($sku);
             $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
@@ -79,6 +94,11 @@ class WC_SSPAA_Stock_Updater
                 $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
 
+                // If this is a variable product, update the parent product stock status based on variations
+                if ($product_type === 'product_variation' && $parent_id > 0) {
+                    $this->update_parent_product_stock($parent_id);
+                }
+
                 // Throttle the requests to respect the rate limit
                 usleep($this->delay);
             } else {
@@ -90,9 +110,10 @@ class WC_SSPAA_Stock_Updater
         $next_products = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT ID FROM {$wpdb->postmeta}
-            LEFT JOIN {$wpdb->posts} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id
-            WHERE meta_key='_sku' AND post_type IN ('product', 'product_variation')
-            ORDER BY ID ASC LIMIT %d OFFSET %d",
+                JOIN {$wpdb->posts} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id
+                WHERE meta_key='_sku' AND post_type IN ('product', 'product_variation')
+                AND meta_value != ''
+                ORDER BY ID ASC LIMIT %d OFFSET %d",
                 $this->batch_size,
                 $next_offset
             )
@@ -100,6 +121,60 @@ class WC_SSPAA_Stock_Updater
 
         // Ensure batch processes are not scheduled multiple times if they already exist.
         // Removed scheduling of next batch to prevent multiple events
+    }
+
+    /**
+     * Update parent variable product stock status based on variations
+     *
+     * @param int $parent_id Parent product ID
+     */
+    private function update_parent_product_stock($parent_id)
+    {
+        global $wpdb;
+        
+        $this->log("Updating stock for parent product ID: {$parent_id}");
+        
+        // Get all variations
+        $variations = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts} 
+                WHERE post_parent = %d AND post_type = 'product_variation'",
+                $parent_id
+            )
+        );
+        
+        if (empty($variations)) {
+            $this->log("No variations found for parent product ID: {$parent_id}");
+            return;
+        }
+        
+        $total_stock = 0;
+        $has_stock = false;
+        
+        foreach ($variations as $variation) {
+            $variation_stock = get_post_meta($variation->ID, '_stock', true);
+            
+            if ($variation_stock === '') {
+                continue;
+            }
+            
+            $variation_stock = floatval($variation_stock);
+            $total_stock += $variation_stock;
+            
+            if ($variation_stock > 0) {
+                $has_stock = true;
+            }
+        }
+        
+        // Update parent product stock
+        update_post_meta($parent_id, '_stock', $total_stock);
+        wc_update_product_stock_status($parent_id, $has_stock ? 'instock' : 'outofstock');
+        
+        // Save last sync time for parent product
+        $current_time = current_time('mysql');
+        update_post_meta($parent_id, '_wc_sspaa_last_sync', $current_time);
+        
+        $this->log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: " . ($has_stock ? 'instock' : 'outofstock'));
     }
 
     private function log($message)
