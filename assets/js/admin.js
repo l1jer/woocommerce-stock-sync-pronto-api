@@ -29,16 +29,60 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    // Update last sync time
-                    $lastSync.text(response.data.last_sync);
+                    // Remove any existing notices
+                    $container.find('.notice').remove();
                     
-                    // Show success message
-                    $container.append(
-                        $('<div class="updated notice inline">')
-                            .text('Stock updated successfully')
-                            .delay(3000)
-                            .fadeOut(400, function() { $(this).remove(); })
-                    );
+                    if (response.data.obsolete) {
+                        // Display obsolete status
+                        if ($lastSync.length > 1) {
+                            // If we already have multiple .wc-sspaa-last-sync elements (one for obsolete, one for date)
+                            $lastSync.first().text('Obsolete').css({
+                                'color': '#dc3232',
+                                'font-weight': 'bold'
+                            });
+                            $lastSync.last().text(response.data.last_sync);
+                        } else {
+                            // Replace existing sync time with obsolete status
+                            $lastSync.text('Obsolete').css({
+                                'color': '#dc3232',
+                                'font-weight': 'bold'
+                            });
+                            
+                            // Add sync time as a new element
+                            $('<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">')
+                                .text(response.data.last_sync)
+                                .insertAfter($lastSync);
+                        }
+                        
+                        // Show success message
+                        $container.append(
+                            $('<div class="updated notice inline">')
+                                .text('Product marked as obsolete')
+                                .delay(3000)
+                                .fadeOut(400, function() { $(this).remove(); })
+                        );
+                    } else {
+                        // If product was previously obsolete, remove the obsolete status
+                        if ($lastSync.length > 1 && $lastSync.first().text() === 'Obsolete') {
+                            $lastSync.first().remove();
+                            $lastSync = $container.find('.wc-sspaa-last-sync');
+                        }
+                        
+                        // Update last sync time
+                        $lastSync.text(response.data.last_sync)
+                            .css({
+                                'color': '#999',
+                                'font-weight': 'normal'
+                            });
+                        
+                        // Show success message
+                        $container.append(
+                            $('<div class="updated notice inline">')
+                                .text('Stock updated successfully')
+                                .delay(3000)
+                                .fadeOut(400, function() { $(this).remove(); })
+                        );
+                    }
                 } else {
                     // Show error message
                     $container.append(

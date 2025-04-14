@@ -23,6 +23,8 @@ Review, understand, and analyse the existing project, then implement the followi
          [x] Confirm which timezone is currently being used — it appears to be set to UTC.
          [x] Update the logic to ensure the Daily Sync Start Time uses the Sydney timezone (AEST) instead of UTC.
          [x] Test to verify the correct sync time runs based on Sydney (AEST) timezone.
+   - [x] **1.3.5** If the API response is `{"products":[],"count":0,"pages":0}`, mark the corresponding product as "Obsolete" in the "Avenue Stock Sync" column on the All Products page, using red text to highlight its status.
+
 
 
 Notes:
