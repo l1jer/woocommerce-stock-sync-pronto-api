@@ -29,16 +29,60 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    // Update last sync time
-                    $lastSync.text(response.data.last_sync);
+                    // Remove any existing notices
+                    $container.find('.notice').remove();
                     
-                    // Show success message
-                    $container.append(
-                        $('<div class="updated notice inline">')
-                            .text('Stock updated successfully')
-                            .delay(3000)
-                            .fadeOut(400, function() { $(this).remove(); })
-                    );
+                    if (response.data.obsolete) {
+                        // Display obsolete status
+                        if ($lastSync.length > 1) {
+                            // If we already have multiple .wc-sspaa-last-sync elements (one for obsolete, one for date)
+                            $lastSync.first().text('Obsolete').css({
+                                'color': '#dc3232',
+                                'font-weight': 'bold'
+                            });
+                            $lastSync.last().text(response.data.last_sync);
+                        } else {
+                            // Replace existing sync time with obsolete status
+                            $lastSync.text('Obsolete').css({
+                                'color': '#dc3232',
+                                'font-weight': 'bold'
+                            });
+                            
+                            // Add sync time as a new element
+                            $('<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">')
+                                .text(response.data.last_sync)
+                                .insertAfter($lastSync);
+                        }
+                        
+                        // Show success message
+                        $container.append(
+                            $('<div class="updated notice inline">')
+                                .text('Product marked as obsolete')
+                                .delay(3000)
+                                .fadeOut(400, function() { $(this).remove(); })
+                        );
+                    } else {
+                        // If product was previously obsolete, remove the obsolete status
+                        if ($lastSync.length > 1 && $lastSync.first().text() === 'Obsolete') {
+                            $lastSync.first().remove();
+                            $lastSync = $container.find('.wc-sspaa-last-sync');
+                        }
+                        
+                        // Update last sync time
+                        $lastSync.text(response.data.last_sync)
+                            .css({
+                                'color': '#999',
+                                'font-weight': 'normal'
+                            });
+                        
+                        // Show success message
+                        $container.append(
+                            $('<div class="updated notice inline">')
+                                .text('Stock updated successfully')
+                                .delay(3000)
+                                .fadeOut(400, function() { $(this).remove(); })
+                        );
+                    }
                 } else {
                     // Show error message
                     $container.append(
@@ -196,6 +240,96 @@ jQuery(document).ready(function($) {
             });
         }
         
+        // Function to test API connection
+        function testApiConnection() {
+            const domain = $('#wc-sspaa-api-site-select').val();
+            
+            if (!domain) {
+                showNotice('Please select a website to test the connection.', 'error');
+                return;
+            }
+            
+            // Clear previous test result
+            $('#wc-sspaa-api-test-result').removeClass('success failure').html('');
+            
+            // Disable button during test
+            $('#wc-sspaa-test-api-connection').prop('disabled', true).text('Testing...');
+            
+            // Test connection via AJAX
+            $.ajax({
+                url: wcSspaaAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'wc_sspaa_test_api_connection',
+                    nonce: wcSspaaAdmin.nonce,
+                    domain: domain
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Show success message
+                        $('#wc-sspaa-api-test-result')
+                            .addClass('success')
+                            .text('SUCCESS');
+                    } else {
+                        // Show error message
+                        $('#wc-sspaa-api-test-result')
+                            .addClass('failure')
+                            .text('FAIL');
+                            
+                        // Show detailed error in notice
+                        showNotice(response.data.message, 'error');
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    // Show error message
+                    $('#wc-sspaa-api-test-result')
+                        .addClass('failure')
+                        .text('FAIL');
+                        
+                    showNotice('Network error occurred when testing API connection: ' + textStatus, 'error');
+                },
+                complete: function() {
+                    // Re-enable button
+                    $('#wc-sspaa-test-api-connection').prop('disabled', false).text('Test API Connection');
+                }
+            });
+        }
+        
+        // Function to update API credentials when domain selection changes
+        function updateApiCredentials() {
+            const domain = $('#wc-sspaa-api-site-select').val();
+            
+            if (!domain) {
+                return;
+            }
+            
+            // Save selected credentials via AJAX
+            $.ajax({
+                url: wcSspaaAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'wc_sspaa_save_api_credentials',
+                    nonce: wcSspaaAdmin.nonce,
+                    domain: domain
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Update credentials display
+                        $('#wc-sspaa-api-username').text(response.data.username);
+                        $('#wc-sspaa-api-password').text(response.data.password);
+                        
+                        // Show success message
+                        showNotice('API credentials updated successfully', 'success');
+                    } else {
+                        showNotice('Error updating API credentials: ' + response.data.message, 'error');
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    showNotice('Network error occurred when updating credentials: ' + textStatus, 'error');
+                }
+            });
+        }
+        
         // Function to show notices
         function showNotice(message, type) {
             const $notice = $('<div class="wc-sspaa-notice ' + type + '">')
@@ -208,6 +342,8 @@ jQuery(document).ready(function($) {
         // Bind event handlers
         $('#wc-sspaa-sync-time').on('change input', updateSyncTimeUTC);
         $('#wc-sspaa-save-time').on('click', saveSyncTime);
+        $('#wc-sspaa-test-api-connection').on('click', testApiConnection);
+        $('#wc-sspaa-api-site-select').on('change', updateApiCredentials);
         
         // Initialize
         updateTimeDisplays();
