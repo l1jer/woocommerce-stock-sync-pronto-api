@@ -23,6 +23,10 @@ class WC_SSPAA_Stock_Sync_Status_Page {
         // Add AJAX handlers
         add_action('wp_ajax_wc_sspaa_get_stock_sync_stats', array($this, 'ajax_get_stock_sync_stats'));
         add_action('wp_ajax_wc_sspaa_save_sync_time', array($this, 'ajax_save_sync_time'));
+        
+        // Add new AJAX handlers for API credentials
+        add_action('wp_ajax_wc_sspaa_test_api_connection', array($this, 'ajax_test_api_connection'));
+        add_action('wp_ajax_wc_sspaa_save_api_credentials', array($this, 'ajax_save_api_credentials'));
     }
 
     /**
@@ -64,9 +68,28 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             true
         );
         
+        // Get the current domain for initializing the dropdown
+        $current_domain = str_replace('www.', '', $_SERVER['HTTP_HOST']);
+        
+        // Get global API credentials array
+        global $wc_sspaa_api_credentials;
+        $active_credentials = array();
+        
+        // Get currently active credentials for display
+        if (isset($wc_sspaa_api_credentials[$current_domain])) {
+            $active_credentials = $wc_sspaa_api_credentials[$current_domain];
+        } else {
+            // Use the first set if no match
+            $first_site = array_key_first($wc_sspaa_api_credentials);
+            $active_credentials = $wc_sspaa_api_credentials[$first_site];
+        }
+        
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wc_sspaa_settings_nonce')
+            'nonce' => wp_create_nonce('wc_sspaa_settings_nonce'),
+            'currentDomain' => $current_domain,
+            'activeUsername' => $active_credentials['username'],
+            'activePassword' => $active_credentials['password']
         );
         
         wp_localize_script('wc-sspaa-admin', 'wcSspaaAdmin', $script_data);
@@ -111,6 +134,31 @@ class WC_SSPAA_Stock_Sync_Status_Page {
                 border-left-color: #dc3232;
                 background-color: #fbeaea;
             }
+            .wc-sspaa-api-test-result {
+                margin-left: 10px;
+                padding: 5px 10px;
+                display: inline-block;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            .wc-sspaa-api-test-result.success {
+                background-color: #ecf7ed;
+                color: #46b450;
+            }
+            .wc-sspaa-api-test-result.failure {
+                background-color: #fbeaea;
+                color: #dc3232;
+            }
+            .wc-sspaa-credentials-display {
+                background: #f9f9f9;
+                border: 1px solid #e5e5e5;
+                padding: 10px;
+                margin-top: 10px;
+            }
+            .wc-sspaa-credentials-display code {
+                display: block;
+                margin: 5px 0;
+            }
         ');
     }
 
@@ -118,11 +166,58 @@ class WC_SSPAA_Stock_Sync_Status_Page {
      * Render the status page
      */
     public function render_page() {
+        // Get global API credentials array for the dropdown
+        global $wc_sspaa_api_credentials;
+        
+        // Get current domain for preselecting dropdown
+        $current_domain = str_replace('www.', '', $_SERVER['HTTP_HOST']);
+        
+        // Determine active credentials
+        $active_credentials = array();
+        if (isset($wc_sspaa_api_credentials[$current_domain])) {
+            $active_credentials = $wc_sspaa_api_credentials[$current_domain];
+        } else {
+            $first_site = array_key_first($wc_sspaa_api_credentials);
+            $active_credentials = $wc_sspaa_api_credentials[$first_site];
+        }
+        
         ?>
         <div class="wrap wc-sspaa-settings-container">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
             
             <p><?php _e('This page provides status information about your WooCommerce stock synchronization with the Pronto Avenue API.', 'woocommerce'); ?></p>
+            
+            <div class="wc-sspaa-status-section">
+                <h2><?php _e('API Credentials', 'woocommerce'); ?></h2>
+                
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Select Website', 'woocommerce'); ?></th>
+                        <td>
+                            <select id="wc-sspaa-api-site-select" name="wc_sspaa_api_site">
+                                <?php foreach ($wc_sspaa_api_credentials as $domain => $creds): ?>
+                                    <option value="<?php echo esc_attr($domain); ?>" <?php selected($domain, $current_domain); ?>>
+                                        <?php echo esc_html($creds['display_name']); ?> (<?php echo esc_html($domain); ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="button" class="button" id="wc-sspaa-test-api-connection"><?php _e('Test API Connection', 'woocommerce'); ?></button>
+                            <span id="wc-sspaa-api-test-result"></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php _e('Current Credentials', 'woocommerce'); ?></th>
+                        <td>
+                            <div class="wc-sspaa-credentials-display">
+                                <strong><?php _e('Username:', 'woocommerce'); ?></strong>
+                                <code id="wc-sspaa-api-username"><?php echo esc_html($active_credentials['username']); ?></code>
+                                <strong><?php _e('Password:', 'woocommerce'); ?></strong>
+                                <code id="wc-sspaa-api-password"><?php echo esc_html($active_credentials['password']); ?></code>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
             
             <div class="wc-sspaa-status-section">
                 <h2><?php _e('Time Information', 'woocommerce'); ?></h2>
@@ -374,12 +469,126 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             $batch_times[] = ['time' => $new_time, 'offset' => $offset];
         }
         
+        // Set up Sydney timezone
+        $sydney_timezone = new DateTimeZone('Australia/Sydney');
+        $utc_timezone = new DateTimeZone('UTC');
+        
+        // Get current date in Sydney timezone
+        $today = new DateTime('now', $sydney_timezone);
+        $today_date = $today->format('Y-m-d');
+        
         // Schedule new events
         foreach ($batch_times as $batch) {
             if (!wp_next_scheduled('wc_sspaa_update_stock_batch', array($batch['offset']))) {
-                wp_schedule_event(strtotime($batch['time']), 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
+                // Create Sydney datetime with the batch time
+                $sydney_datetime = new DateTime($today_date . ' ' . $batch['time'], $sydney_timezone);
+                
+                // Convert to UTC for scheduling
+                $sydney_datetime->setTimezone($utc_timezone);
+                $utc_timestamp = $sydney_datetime->getTimestamp();
+                
+                wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
             }
         }
+    }
+
+    /**
+     * AJAX handler to test API connection
+     */
+    public function ajax_test_api_connection() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(array('message' => 'Permission denied'));
+            return;
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('wc_sspaa_settings_nonce', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+        
+        $site_domain = isset($_POST['domain']) ? sanitize_text_field($_POST['domain']) : '';
+        
+        // Validate domain
+        if (empty($site_domain)) {
+            wp_send_json_error(array('message' => 'No domain specified'));
+            return;
+        }
+        
+        // Get global credentials array
+        global $wc_sspaa_api_credentials;
+        
+        // Check if domain exists in our credentials
+        if (!isset($wc_sspaa_api_credentials[$site_domain])) {
+            wp_send_json_error(array('message' => 'Invalid domain specified'));
+            return;
+        }
+        
+        // Get credentials for the selected domain
+        $credentials = $wc_sspaa_api_credentials[$site_domain];
+        
+        // Create API handler with specified credentials
+        $api_handler = new WC_SSPAA_API_Handler($credentials['username'], $credentials['password']);
+        
+        // Test the connection
+        $test_result = $api_handler->test_connection();
+        
+        if ($test_result['success']) {
+            wp_send_json_success(array(
+                'message' => $test_result['message'],
+                'username' => $credentials['username'],
+                'password' => $credentials['password']
+            ));
+        } else {
+            wp_send_json_error(array('message' => $test_result['message']));
+        }
+    }
+    
+    /**
+     * AJAX handler to save selected API credentials
+     */
+    public function ajax_save_api_credentials() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(array('message' => 'Permission denied'));
+            return;
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('wc_sspaa_settings_nonce', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+        
+        $site_domain = isset($_POST['domain']) ? sanitize_text_field($_POST['domain']) : '';
+        
+        // Validate domain
+        if (empty($site_domain)) {
+            wp_send_json_error(array('message' => 'No domain specified'));
+            return;
+        }
+        
+        // Get global credentials array
+        global $wc_sspaa_api_credentials;
+        
+        // Check if domain exists in our credentials
+        if (!isset($wc_sspaa_api_credentials[$site_domain])) {
+            wp_send_json_error(array('message' => 'Invalid domain specified'));
+            return;
+        }
+        
+        // Get credentials for the selected domain
+        $credentials = $wc_sspaa_api_credentials[$site_domain];
+        
+        // Update option to save selected domain for persistence across page loads
+        update_option('wc_sspaa_selected_domain', $site_domain);
+        
+        wp_send_json_success(array(
+            'message' => 'API credentials updated successfully',
+            'username' => $credentials['username'],
+            'password' => $credentials['password']
+        ));
     }
 }
 

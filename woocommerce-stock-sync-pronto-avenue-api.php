@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with batch processing.
-Version: 1.2.7
+Version: 1.3.3
 Author: Jerry Li
 */
 
@@ -41,6 +41,10 @@ function wc_sspaa_schedule_batches()
     $sync_time = get_option('wc_sspaa_sync_time', '02:00:00');
     wc_sspaa_log("Using sync time: {$sync_time}");
     
+    // Set up Sydney timezone
+    $sydney_timezone = new DateTimeZone('Australia/Sydney');
+    $utc_timezone = new DateTimeZone('UTC');
+    
     // Generate batch times
     $batch_times = [];
     for ($i = 0; $i < 11; $i++) {
@@ -64,10 +68,24 @@ function wc_sspaa_schedule_batches()
         $batch_times[] = ['time' => $batch_time, 'offset' => $offset];
     }
 
+    // Get current date in Sydney timezone
+    $today = new DateTime('now', $sydney_timezone);
+    $today_date = $today->format('Y-m-d');
+
     foreach ($batch_times as $batch) {
         if (!wp_next_scheduled('wc_sspaa_update_stock_batch', array($batch['offset']))) {
-            wc_sspaa_log('Scheduling batch with offset: ' . $batch['offset'] . ' at time: ' . $batch['time']);
-            wp_schedule_event(strtotime($batch['time']), 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
+            // Create Sydney datetime with the batch time
+            $sydney_datetime = new DateTime($today_date . ' ' . $batch['time'], $sydney_timezone);
+            
+            // Convert to UTC for scheduling
+            $sydney_datetime->setTimezone($utc_timezone);
+            $utc_timestamp = $sydney_datetime->getTimestamp();
+            
+            wc_sspaa_log('Scheduling batch with offset: ' . $batch['offset'] . 
+                ' at Sydney time: ' . $batch['time'] . 
+                ' (UTC time: ' . $sydney_datetime->format('Y-m-d H:i:s') . ')');
+            
+            wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
         } else {
             wc_sspaa_log('Batch with offset ' . $batch['offset'] . ' is already scheduled.');
         }

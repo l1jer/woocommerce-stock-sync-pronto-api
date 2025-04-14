@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.2.7
+**Stable tag:** 1.3.3
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -53,6 +53,18 @@ The plugin processes stock updates in batches, updating a specified number of pr
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
 ## Changelog
+
+### 1.3.3
+* Version number update for release management
+* Fixed timezone issue with batch scheduling to correctly use Sydney time (AEST/AEDT) instead of UTC
+* Improved logging for scheduled batch times showing both Sydney and UTC times
+
+### 1.3.0
+* Added dynamic API credentials management based on website context
+* Added dropdown menu for API credential selection in the Stock Sync Status page
+* Added Test API Connection button to verify credentials
+* Display active API credentials on the settings page
+* API credentials automatically determined based on current website domain
 
 ### 1.2.7
 * Remove additional logs.

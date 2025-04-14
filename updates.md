@@ -15,26 +15,26 @@ Review, understand, and analyse the existing project, then implement the followi
    - [x] **1.2.6** Present the last synchronisation completion date and time in both UTC and Sydney time.
    - [x] **1.2.7** Remove additional logs.
 
-- [ ] **1.3** Make the project dynamic by automatically using the correct set of API credentials from the `config.php` file based on the website context. There are 3 sets of username and password based on different websites(see below API credentials)
-   - [ ] **1.3.1** Add a dropdown menu in the **Stock Sync Status** page that lists all available API usernames and passwords (display their website URL instead of showing the credentials in the dropdown list). This selection should update dynamically via AJAX without clicking any save button.
-   - [ ] **1.3.2** Add a **Test API Connection** button next to the dropdown. When clicked, it should test the currently selected credentials and display either **SUCCESS** or **FAIL** based on the response.
-   - [ ] **1.3.3** The `config.php` contains 3 different sets of usernames and passwords for API access. Depending on the website being used, load and apply the appropriate credentials. Additionally, display the currently active credentials (both name and value) on the **wc-sspaa-setting** page for reference.
+- [x] **1.3** Make the project dynamic by automatically using the correct set of API credentials from the `config.php` file based on the website context. There are 3 sets of username and password based on different websites(see below API credentials) using a same API URL
+   - [x] **1.3.1** Add a dropdown menu in the **Stock Sync Status** page that lists all available API usernames and passwords (display their website URL instead of showing the credentials in the dropdown list). This selection should update dynamically via AJAX without clicking any save button.
+   - [x] **1.3.2** Add a **Test API Connection** button next to the dropdown. When clicked, it should test the currently selected credentials and display either **SUCCESS** or **FAIL** based on the response.
+   - [x] **1.3.3** The `config.php` contains 3 different sets of usernames and passwords for API access. Depending on the website being used, load and apply the appropriate credentials. Additionally, display the currently active credentials (both name and value) on the **wc-sspaa-setting** page for reference.
+   - [x] **1.3.4** Review the implementation of the Daily Sync Start Time feature.
+         [x] Confirm which timezone is currently being used — it appears to be set to UTC.
+         [x] Update the logic to ensure the Daily Sync Start Time uses the Sydney timezone (AEST) instead of UTC.
+         [x] Test to verify the correct sync time runs based on Sydney (AEST) timezone.
 
-   // API Credentials for different websites
-   // nitecoreaustralia.com.au
-   // Username: 8dac5f8d-3db8-4483-b5c3-4921b1e6c8d0
-   // Password: 6be417682d60679f630d34f4f8b3f9
-   //
-   // zerotech.com.au
-   // Username: 1ae562ff-e8d9-4dfc-aa31-9851fbf2a883
-   // Password: 16b7f82b82af78e6cf38739338270f
-   //
-   // store.zerotechoptics.com
-   // Username: 42163f7e-6778-4346-822b-6f9786dcfa1f
-   // Password: 062b372de782a56c96aec125b62093
 
- <!-- // Archived Tasks
-- [ ] **1.1.13** Completely remove all code and functions related to **Notification Email** functionality, ensuring that any references, hooks, or dependencies associated with sending notification emails are also eliminated.
-- [ ] **1.1.14** The "Sync Stock" button on each product line in the All Products page is currently returning an error message: "Sync error: API Error: Could not retrieve data". This issue needs to be investigated and resolved to ensure proper functionality.
-- [ ] **1.1.14a** Clean remaining email related code.
-- [ ] **1.1.15** Replace the function of the **"Stock Sync Status"** button on the **All Products** admin page so that instead of redirecting, it manually triggers the stock sync process (optionally via AJAX but still following existing API rules), provides feedback in debug.log and a success message when successfully executed, and retains its original styling and position. -->
+Notes:
+// API Credentials for different websites
+// nitecoreaustralia.com.au
+// Username: 8dac5f8d-3db8-4483-b5c3-4921b1e6c8d0
+// Password: 6be417682d60679f630d34f4f8b3f9
+//
+// zerotech.com.au
+// Username: 1ae562ff-e8d9-4dfc-aa31-9851fbf2a883
+// Password: 16b7f82b82af78e6cf38739338270f
+//
+// store.zerotechoptics.com
+// Username: 42163f7e-6778-4346-822b-6f9786dcfa1f
+// Password: 062b372de782a56c96aec125b62093
