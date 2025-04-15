@@ -6,6 +6,7 @@ assets/css/.DS_Store
 assets/js/.DS_Store
 includes/.DS_Store
 includes/config.php
+Stock Sync Tasks.md
 # Ignore log files
 *.log
 # Ignore temporary files
@@ -23,4 +24,3 @@ ehthumbs.db
 .vscode/
 .cursorignore
 # End of Selection
-updates.md
