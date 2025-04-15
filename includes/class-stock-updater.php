@@ -25,15 +25,17 @@ class WC_SSPAA_Stock_Updater
     {
         global $wpdb;
 
-        // Fetch products from WooCommerce with pagination
+        // Fetch products from WooCommerce with pagination, excluding those marked as 'Obsolete'
         $products = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
                 FROM {$wpdb->postmeta} pm
                 JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                LEFT JOIN {$wpdb->postmeta} pm_sync ON pm_sync.post_id = p.ID AND pm_sync.meta_key = '_wc_sspaa_last_sync'
                 WHERE pm.meta_key='_sku' 
                 AND p.post_type IN ('product', 'product_variation')
                 AND pm.meta_value != ''
+                AND (pm_sync.meta_value IS NULL OR pm_sync.meta_value != 'Obsolete')
                 ORDER BY p.ID ASC LIMIT %d OFFSET %d",
                 $this->batch_size,
                 $offset
@@ -102,7 +104,23 @@ class WC_SSPAA_Stock_Updater
                 // Throttle the requests to respect the rate limit
                 usleep($this->delay);
             } else {
-                $this->log('No product data found for SKU: ' . $sku);
+                // Handle empty response - likely obsolete product
+                if (isset($response['products']) && empty($response['products']) && isset($response['count']) && $response['count'] === 0) {
+                    $this->log('API response indicates SKU ' . $sku . ' is obsolete or not found. Setting stock to 0.');
+                    // Set stock to 0 and status to outofstock
+                    update_post_meta($product_id, '_stock', 0);
+                    wc_update_product_stock_status($product_id, 'outofstock');
+                    // Update sync status to 'Obsolete'
+                    update_post_meta($product_id, '_wc_sspaa_last_sync', 'Obsolete');
+                    
+                    // Also update parent if it's a variation
+                    if ($product_type === 'product_variation' && $parent_id > 0) {
+                        $this->update_parent_product_stock($parent_id); // Update parent based on all variations
+                    }
+                } else {
+                    // Log other potential errors or unexpected responses
+                    $this->log('No product data found or unexpected API response for SKU: ' . $sku);
+                }
             }
         }
 

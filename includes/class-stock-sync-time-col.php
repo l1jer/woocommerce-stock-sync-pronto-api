@@ -33,11 +33,18 @@ class WC_SSPAA_Stock_Sync_Time_Col
             $last_sync = get_post_meta($post_id, '_wc_sspaa_last_sync', true);
             $sku = get_post_meta($post_id, '_sku', true);
             
-            // Add sync button with the product ID as data attribute
             echo '<div class="wc-sspaa-sync-container">';
+            
             if ($last_sync) {
-                echo '<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">' . esc_html($last_sync) . '</span>';
+                if ($last_sync === 'Obsolete') {
+                    // Display 'Obsolete' in red if the meta value is exactly 'Obsolete'
+                    echo '<span class="wc-sspaa-last-sync" style="color: red; font-weight: bold; display: block; margin-bottom: 5px;">Obsolete</span>';
+                } else {
+                    // Display the actual sync time (timestamp)
+                    echo '<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">' . esc_html($last_sync) . '</span>';
+                }
             } else {
+                // Display N/A if no sync info exists
                 echo '<span class="wc-sspaa-last-sync" style="color: #999; display: block; margin-bottom: 5px;">N/A</span>';
             }
             

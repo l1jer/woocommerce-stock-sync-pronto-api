@@ -96,7 +96,7 @@ function wc_sspaa_process_batch($batch_offset)
 {
     wc_sspaa_log('Processing batch with offset: ' . $batch_offset);
     $api_handler = new WC_SSPAA_API_Handler();
-    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 2000000, 15, 2000000, 15, 25, false); // Set enable_debug to false
+    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 2000000, 15, 2000000, 15, 25, true);
     $stock_updater->update_stock($batch_offset);
     // Removed scheduling of new events from within the batch processing function
 }

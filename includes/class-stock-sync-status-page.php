@@ -294,8 +294,91 @@ class WC_SSPAA_Stock_Sync_Status_Page {
                     </tr>
                 </table>
             </div>
+            
+            <div class="wc-sspaa-status-section">
+                <h2><?php _e('Sync Status', 'woocommerce'); ?></h2>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Total Products with SKU', 'woocommerce'); ?></th>
+                        <td id="wc-sspaa-total-sku-products">Loading...</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php _e('Total Batches', 'woocommerce'); ?></th>
+                        <td id="wc-sspaa-total-batches">Loading...</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php _e('Next Scheduled Batch', 'woocommerce'); ?></th>
+                        <td>
+                            <div class="wc-sspaa-time-display" id="wc-sspaa-next-batch-time-utc">
+                                <?php _e('UTC: Loading...', 'woocommerce'); ?>
+                            </div>
+                            <div class="wc-sspaa-time-display" id="wc-sspaa-next-batch-time-aest">
+                                <?php _e('AEST: Loading...', 'woocommerce'); ?>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php _e('Last Sync Completion', 'woocommerce'); ?></th>
+                        <td>
+                            <div class="wc-sspaa-time-display" id="wc-sspaa-last-sync-time-utc">
+                                <?php _e('UTC: Loading...', 'woocommerce'); ?>
+                            </div>
+                            <div class="wc-sspaa-time-display" id="wc-sspaa-last-sync-time-aest">
+                                <?php _e('AEST: Loading...', 'woocommerce'); ?>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="wc-sspaa-status-section">
+                <h2><?php _e('Obsolete Products', 'woocommerce'); ?></h2>
+                <p><?php _e('Products marked as obsolete will be excluded from daily sync cycles.', 'woocommerce'); ?></p>
+                <div id="wc-sspaa-obsolete-products-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #f9f9f9;">
+                    <?php $this->render_obsolete_products(); ?>
+                </div>
+            </div>
+            
+            <div id="wc-sspaa-notice-area"></div>
         </div>
         <?php
+    }
+
+    /**
+     * Render the list of obsolete products
+     */
+    private function render_obsolete_products() {
+        global $wpdb;
+
+        $obsolete_products = $wpdb->get_results(
+            "SELECT p.ID, p.post_title, pm.meta_value AS sku
+            FROM {$wpdb->posts} p
+            JOIN {$wpdb->postmeta} pm_sync ON pm_sync.post_id = p.ID
+            LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_sku'
+            WHERE pm_sync.meta_key = '_wc_sspaa_last_sync'
+            AND pm_sync.meta_value = 'Obsolete'
+            AND p.post_type IN ('product', 'product_variation')
+            ORDER BY p.post_title ASC"
+        );
+
+        if (empty($obsolete_products)) {
+            echo '<p>' . __('No products are currently marked as obsolete.', 'woocommerce') . '</p>';
+        } else {
+            echo '<ul>';
+            foreach ($obsolete_products as $product) {
+                $edit_link = get_edit_post_link($product->ID);
+                $sku_display = $product->sku ? ' (SKU: ' . esc_html($product->sku) . ')' : ' (No SKU)';
+                echo '<li>';
+                if ($edit_link) {
+                    echo '<a href="' . esc_url($edit_link) . '" target="_blank">' . esc_html($product->post_title) . '</a>';
+                } else {
+                    echo esc_html($product->post_title);
+                }
+                echo esc_html($sku_display);
+                echo '</li>';
+            }
+            echo '</ul>';
+        }
     }
 
     /**
