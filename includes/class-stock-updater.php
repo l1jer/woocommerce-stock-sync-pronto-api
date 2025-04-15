@@ -88,9 +88,6 @@ class WC_SSPAA_Stock_Updater
                 // Update stock quantity
                 update_post_meta($product_id, '_stock', $quantity);
                 wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
-                
-                // Reset the obsolete flag if product was previously marked as obsolete
-                delete_post_meta($product_id, '_wc_sspaa_obsolete');
 
                 // Save last sync time
                 $current_time = current_time('mysql');
@@ -106,25 +103,6 @@ class WC_SSPAA_Stock_Updater
                 usleep($this->delay);
             } else {
                 $this->log('No product data found for SKU: ' . $sku);
-                
-                // Check if response matches the obsolete pattern
-                if ($response && isset($response['products']) && empty($response['products']) && 
-                    isset($response['count']) && $response['count'] === 0 && 
-                    isset($response['pages']) && $response['pages'] === 0) {
-                    
-                    $this->log('Product ID: ' . $product_id . ' with SKU: ' . $sku . ' is marked as obsolete');
-                    
-                    // Mark the product as obsolete
-                    update_post_meta($product_id, '_wc_sspaa_obsolete', 'yes');
-                    
-                    // Set stock to 0 as it's obsolete
-                    update_post_meta($product_id, '_stock', 0);
-                    wc_update_product_stock_status($product_id, 'outofstock');
-                    
-                    // Save last sync time
-                    $current_time = current_time('mysql');
-                    update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-                }
             }
         }
 
@@ -172,15 +150,9 @@ class WC_SSPAA_Stock_Updater
         
         $total_stock = 0;
         $has_stock = false;
-        $all_obsolete = true;
         
         foreach ($variations as $variation) {
             $variation_stock = get_post_meta($variation->ID, '_stock', true);
-            $is_obsolete = get_post_meta($variation->ID, '_wc_sspaa_obsolete', true) === 'yes';
-            
-            if (!$is_obsolete) {
-                $all_obsolete = false;
-            }
             
             if ($variation_stock === '') {
                 continue;
@@ -197,14 +169,6 @@ class WC_SSPAA_Stock_Updater
         // Update parent product stock
         update_post_meta($parent_id, '_stock', $total_stock);
         wc_update_product_stock_status($parent_id, $has_stock ? 'instock' : 'outofstock');
-        
-        // Mark parent as obsolete if all variations are obsolete
-        if ($all_obsolete) {
-            update_post_meta($parent_id, '_wc_sspaa_obsolete', 'yes');
-            $this->log("Parent product ID: {$parent_id} marked as obsolete because all variations are obsolete");
-        } else {
-            delete_post_meta($parent_id, '_wc_sspaa_obsolete');
-        }
         
         // Save last sync time for parent product
         $current_time = current_time('mysql');

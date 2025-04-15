@@ -23,20 +23,11 @@ Review, understand, and analyse the existing project, then implement the followi
          [x] Confirm which timezone is currently being used — it appears to be set to UTC.
          [x] Update the logic to ensure the Daily Sync Start Time uses the Sydney timezone (AEST) instead of UTC.
          [x] Test to verify the correct sync time runs based on Sydney (AEST) timezone.
-   - [x] **1.3.5** If the API response is `{"products":[],"count":0,"pages":0}`, mark the corresponding product as "Obsolete" in the "Avenue Stock Sync" column on the All Products page, using red text to highlight its status.
-
-
-
-Notes:
-// API Credentials for different websites
-// nitecoreaustralia.com.au
-// Username: 8dac5f8d-3db8-4483-b5c3-4921b1e6c8d0
-// Password: 6be417682d60679f630d34f4f8b3f9
-//
-// zerotech.com.au
-// Username: 1ae562ff-e8d9-4dfc-aa31-9851fbf2a883
-// Password: 16b7f82b82af78e6cf38739338270f
-//
-// store.zerotechoptics.com
-// Username: 42163f7e-6778-4346-822b-6f9786dcfa1f
-// Password: 062b372de782a56c96aec125b62093
+   - [x] **1.3.5** Review, identify and understand these following logs then fix them in best practices:
+   [15-Apr-2025 12:00:04 UTC] PHP Warning:  Undefined array key "HTTP_HOST" in /home/customer/www/zerotech.com.au/public_html/wp-content/plugins/woocommerce-stock-sync-pronto-api/includes/config.php on line 27
+[15-Apr-2025 12:00:04 UTC] PHP Deprecated:  str_replace(): Passing null to parameter #3 ($subject) of type array|string is deprecated in /home/customer/www/zerotech.com.au/public_html/wp-content/plugins/woocommerce-stock-sync-pronto-api/includes/config.php on line 27
+   - [ ] **1.3.6** Implement a button on the All Products admin page titled "Sync All Products Now". Upon clicking this button, the following actions should occur:
+     - Initiate a manual AJAX function that triggers the synchronisation of all products immediately, bypassing any scheduled tasks or cron jobs. Each product's stock should be synced based on its SKU, with a delay of 3 seconds between each sync to comply with API rate limits.
+     - Incorporate debug logging to capture the progress of the sync cycle, including details of successes, failures, and any relevant API responses.
+     - Provide user feedback through the UI, such as a loading indicator and notifications for success or failure. Additionally, log each sync event in the `debug.log` file located within the plugin folder.
+   - [ ] **1.3.7** If the API response is `{"products":[],"count":0,"pages":0}`, mark the corresponding product as "Obsolete" in the "Avenue Stock Sync" column on the All Products page, using red text to highlight its status.
