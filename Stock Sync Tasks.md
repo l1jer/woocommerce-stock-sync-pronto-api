@@ -34,6 +34,7 @@ Review, understand, and analyse the existing project, then implement the followi
      - [x] Modified `WC_SSPAA_Stock_Sync_Time_Col` to display 'Obsolete' in red based on the meta value.
      - [x] Modified `WC_SSPAA_Stock_Updater` query to exclude products marked as 'Obsolete' from daily sync batches.
      - [x] Added a section to the "Stock Sync Status" page (`WC_SSPAA_Stock_Sync_Status_Page`) to list all products currently marked as 'Obsolete'.
+     - [x] **1.3.7a** Modified the "Stock Sync Status" page query (`ajax_get_stock_sync_stats`) to exclude obsolete products from the "Products with SKUs" and "Total Batches" counts.
    - [ ] **1.3.8** Implement a button on the All Products admin page titled "Sync All Products Now". Upon clicking this button, the following actions should occur:
      - Initiate a manual AJAX function that triggers the synchronisation of all products immediately, bypassing any scheduled tasks or cron jobs. Each product's stock should be synced based on its SKU, with a delay of 3 seconds between each sync to comply with API rate limits.
      - Incorporate debug logging to capture the progress of the sync cycle, including details of successes, failures, and any relevant API responses.

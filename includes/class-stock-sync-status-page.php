@@ -296,42 +296,6 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             </div>
             
             <div class="wc-sspaa-status-section">
-                <h2><?php _e('Sync Status', 'woocommerce'); ?></h2>
-                <table class="form-table">
-                    <tr>
-                        <th scope="row"><?php _e('Total Products with SKU', 'woocommerce'); ?></th>
-                        <td id="wc-sspaa-total-sku-products">Loading...</td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php _e('Total Batches', 'woocommerce'); ?></th>
-                        <td id="wc-sspaa-total-batches">Loading...</td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php _e('Next Scheduled Batch', 'woocommerce'); ?></th>
-                        <td>
-                            <div class="wc-sspaa-time-display" id="wc-sspaa-next-batch-time-utc">
-                                <?php _e('UTC: Loading...', 'woocommerce'); ?>
-                            </div>
-                            <div class="wc-sspaa-time-display" id="wc-sspaa-next-batch-time-aest">
-                                <?php _e('AEST: Loading...', 'woocommerce'); ?>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php _e('Last Sync Completion', 'woocommerce'); ?></th>
-                        <td>
-                            <div class="wc-sspaa-time-display" id="wc-sspaa-last-sync-time-utc">
-                                <?php _e('UTC: Loading...', 'woocommerce'); ?>
-                            </div>
-                            <div class="wc-sspaa-time-display" id="wc-sspaa-last-sync-time-aest">
-                                <?php _e('AEST: Loading...', 'woocommerce'); ?>
-                            </div>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-            
-            <div class="wc-sspaa-status-section">
                 <h2><?php _e('Obsolete Products', 'woocommerce'); ?></h2>
                 <p><?php _e('Products marked as obsolete will be excluded from daily sync cycles.', 'woocommerce'); ?></p>
                 <div id="wc-sspaa-obsolete-products-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #f9f9f9;">
@@ -400,14 +364,19 @@ class WC_SSPAA_Stock_Sync_Status_Page {
         global $wpdb;
         
         try {
-            // Get count of products with SKUs
+            // Get count of products with SKUs, excluding obsolete ones
             $products_with_skus = $wpdb->get_var(
-                "SELECT COUNT(DISTINCT p.ID) 
-                FROM {$wpdb->postmeta} pm
-                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                WHERE pm.meta_key = '_sku' 
-                AND p.post_type IN ('product', 'product_variation')
-                AND pm.meta_value != ''"
+                $wpdb->prepare(
+                    "SELECT COUNT(DISTINCT p.ID) 
+                    FROM {$wpdb->postmeta} pm
+                    JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                    LEFT JOIN {$wpdb->postmeta} pm_sync ON pm_sync.post_id = p.ID AND pm_sync.meta_key = '_wc_sspaa_last_sync'
+                    WHERE pm.meta_key = '_sku' 
+                    AND p.post_type IN ('product', 'product_variation')
+                    AND pm.meta_value != ''
+                    AND (pm_sync.meta_value IS NULL OR pm_sync.meta_value != %s)",
+                    'Obsolete'
+                )
             );
             
             // Calculate total batches
