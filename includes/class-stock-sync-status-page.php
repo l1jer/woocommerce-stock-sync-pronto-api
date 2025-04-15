@@ -294,55 +294,8 @@ class WC_SSPAA_Stock_Sync_Status_Page {
                     </tr>
                 </table>
             </div>
-            
-            <div class="wc-sspaa-status-section">
-                <h2><?php _e('Obsolete Products', 'woocommerce'); ?></h2>
-                <p><?php _e('Products marked as obsolete will be excluded from daily sync cycles.', 'woocommerce'); ?></p>
-                <div id="wc-sspaa-obsolete-products-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #f9f9f9;">
-                    <?php $this->render_obsolete_products(); ?>
-                </div>
-            </div>
-            
-            <div id="wc-sspaa-notice-area"></div>
         </div>
         <?php
-    }
-
-    /**
-     * Render the list of obsolete products
-     */
-    private function render_obsolete_products() {
-        global $wpdb;
-
-        $obsolete_products = $wpdb->get_results(
-            "SELECT p.ID, p.post_title, pm.meta_value AS sku
-            FROM {$wpdb->posts} p
-            JOIN {$wpdb->postmeta} pm_sync ON pm_sync.post_id = p.ID
-            LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_sku'
-            WHERE pm_sync.meta_key = '_wc_sspaa_last_sync'
-            AND pm_sync.meta_value = 'Obsolete'
-            AND p.post_type IN ('product', 'product_variation')
-            ORDER BY p.post_title ASC"
-        );
-
-        if (empty($obsolete_products)) {
-            echo '<p>' . __('No products are currently marked as obsolete.', 'woocommerce') . '</p>';
-        } else {
-            echo '<ul>';
-            foreach ($obsolete_products as $product) {
-                $edit_link = get_edit_post_link($product->ID);
-                $sku_display = $product->sku ? ' (SKU: ' . esc_html($product->sku) . ')' : ' (No SKU)';
-                echo '<li>';
-                if ($edit_link) {
-                    echo '<a href="' . esc_url($edit_link) . '" target="_blank">' . esc_html($product->post_title) . '</a>';
-                } else {
-                    echo esc_html($product->post_title);
-                }
-                echo esc_html($sku_display);
-                echo '</li>';
-            }
-            echo '</ul>';
-        }
     }
 
     /**
@@ -364,19 +317,14 @@ class WC_SSPAA_Stock_Sync_Status_Page {
         global $wpdb;
         
         try {
-            // Get count of products with SKUs, excluding obsolete ones
+            // Get count of products with SKUs
             $products_with_skus = $wpdb->get_var(
-                $wpdb->prepare(
-                    "SELECT COUNT(DISTINCT p.ID) 
-                    FROM {$wpdb->postmeta} pm
-                    JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                    LEFT JOIN {$wpdb->postmeta} pm_sync ON pm_sync.post_id = p.ID AND pm_sync.meta_key = '_wc_sspaa_last_sync'
-                    WHERE pm.meta_key = '_sku' 
-                    AND p.post_type IN ('product', 'product_variation')
-                    AND pm.meta_value != ''
-                    AND (pm_sync.meta_value IS NULL OR pm_sync.meta_value != %s)",
-                    'Obsolete'
-                )
+                "SELECT COUNT(DISTINCT p.ID) 
+                FROM {$wpdb->postmeta} pm
+                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                WHERE pm.meta_key = '_sku' 
+                AND p.post_type IN ('product', 'product_variation')
+                AND pm.meta_value != ''"
             );
             
             // Calculate total batches
@@ -407,18 +355,30 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             $last_sync_utc = 'Never';
             $last_sync_sydney = 'Never';
             
-            if ($last_sync) {
-                // Convert from local WP time to UTC
-                $wp_timezone = new DateTimeZone(wp_timezone_string());
-                $utc_timezone = new DateTimeZone('UTC');
-                $sydney_timezone = new DateTimeZone('Australia/Sydney');
-                
-                $dt = new DateTime($last_sync, $wp_timezone);
-                $dt->setTimezone($utc_timezone);
-                $last_sync_utc = $dt->format('Y-m-d H:i:s');
-                
-                $dt->setTimezone($sydney_timezone);
-                $last_sync_sydney = $dt->format('Y-m-d H:i:s');
+            // Check if last_sync is a valid timestamp before parsing
+            if ($last_sync && is_numeric(strtotime($last_sync))) { 
+                try {
+                    // Convert from local WP time to UTC
+                    $wp_timezone = new DateTimeZone(wp_timezone_string());
+                    $utc_timezone = new DateTimeZone('UTC');
+                    $sydney_timezone = new DateTimeZone('Australia/Sydney');
+                    
+                    $dt = new DateTime($last_sync, $wp_timezone);
+                    $dt->setTimezone($utc_timezone);
+                    $last_sync_utc = $dt->format('Y-m-d H:i:s');
+                    
+                    $dt->setTimezone($sydney_timezone);
+                    $last_sync_sydney = $dt->format('Y-m-d H:i:s');
+                } catch (Exception $date_ex) {
+                    // Handle potential date parsing errors gracefully
+                    $last_sync_utc = 'Error parsing date';
+                    $last_sync_sydney = 'Error parsing date';
+                    // Optionally log the error: error_log('Error parsing last sync date: ' . $date_ex->getMessage());
+                }
+            } elseif ($last_sync) {
+                // Handle non-timestamp values like 'Obsolete'
+                $last_sync_utc = $last_sync; // Display the value directly (e.g., "Obsolete")
+                $last_sync_sydney = $last_sync;
             }
             
             // Return data
