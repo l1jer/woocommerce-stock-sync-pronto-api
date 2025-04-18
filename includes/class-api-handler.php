@@ -26,7 +26,12 @@ class WC_SSPAA_API_Handler
      */
     public function get_product_data($sku)
     {
+        // Determine context
+        $context = (defined('DOING_CRON') && DOING_CRON) ? 'cron' : (is_admin() ? 'admin' : 'frontend');
+        $log_prefix = "[Context: $context] [Username: {$this->username}] [Domain: " . ($_SERVER['HTTP_HOST'] ?? 'N/A') . "] ";
+
         $url = $this->api_url . '?code=' . urlencode($sku);
+        wc_sspaa_log($log_prefix . 'Requesting URL: ' . $url);
 
         $response = wp_remote_get($url, array(
             'headers' => array(
@@ -35,15 +40,18 @@ class WC_SSPAA_API_Handler
         ));
 
         if (is_wp_error($response)) {
-            wc_sspaa_log('API request failed: ' . $response->get_error_message());
+            wc_sspaa_log($log_prefix . 'API request failed: ' . $response->get_error_message());
             return null;
         }
 
+        $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
+        wc_sspaa_log($log_prefix . 'HTTP status: ' . $status_code . '; Raw response: ' . $body);
+
         $data = json_decode($body, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            wc_sspaa_log('JSON decode error: ' . json_last_error_msg());
+            wc_sspaa_log($log_prefix . 'JSON decode error: ' . json_last_error_msg() . '; Raw body: ' . $body);
             return null;
         }
 

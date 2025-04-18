@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.4
+**Stable tag:** 1.3.6
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -54,6 +54,13 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 ## Changelog
 
+### 1.3.6
+* Fixed bug where scheduled sync (cron) could use incorrect API credentials if HTTP_HOST was not set. Now uses the selected domain from Stock Sync Status page as fallback.
+* Improved debug logging to show context, credentials, and API responses for both manual and scheduled syncs.
+
+### 1.3.5
+* Fixed PHP warning and deprecation notice in config.php by safely checking HTTP_HOST and handling null values for str_replace.
+
 ### 1.3.4
 * Fixed PHP Warning and Deprecation notice in `includes/config.php` by safely checking `$_SERVER['HTTP_HOST']`
 
@@ -61,6 +68,12 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 * Version number update for release management
 * Fixed timezone issue with batch scheduling to correctly use Sydney time (AEST/AEDT) instead of UTC
 * Improved logging for scheduled batch times showing both Sydney and UTC times
+
+### 1.3.2
+* Added Test API Connection button to Stock Sync Status page to verify selected API credentials and display SUCCESS or FAIL based on the response.
+
+### 1.3.1
+* Added dropdown menu in Stock Sync Status page to select from all available API usernames and passwords (displaying website URL instead of credentials). Selection updates dynamically via AJAX without needing to click save.
 
 ### 1.3.0
 * Added dynamic API credentials management based on website context
