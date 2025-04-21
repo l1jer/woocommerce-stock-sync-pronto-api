@@ -43,6 +43,7 @@ Review, understand, and analyse the existing project, then implement the followi
       [2025-04-19 19:30:27] Processing batch with offset: 165
       [2025-04-19 19:31:00] Processing batch with offset: 135
       [2025-04-19 20:00:38] Processing batch with offset: 150
+   - [x] **1.3.8** Implement a mechanism so that the plugin's debug.log file only retains log entries from the last 4 days. Older log entries (older than 4 days from the current date/time) should be automatically deleted or purged on a regular basis, ensuring the log file remains current and does not grow indefinitely.
 
 <!-- Archived -->
    - [ ] Implement a button on the All Products admin page titled "Sync All Products Now". Upon clicking this button, the following actions should occur:

@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.7
+**Stable tag:** 1.3.8
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -179,3 +179,6 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 * Process stock updates from local JSON data in manageable batches.
 * Log detailed debug information for troubleshooting.
 * Handle API rate limits and server execution time constraints.
+
+### 1.3.8
+* Added automatic log retention: debug.log now only retains log entries from the last 4 days. Older entries are purged automatically before each new log write, ensuring the log file remains current and does not grow indefinitely.

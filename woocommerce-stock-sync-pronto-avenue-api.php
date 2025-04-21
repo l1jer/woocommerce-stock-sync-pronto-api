@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with batch processing.
-Version: 1.3.7
+Version: 1.3.8
 Author: Jerry Li
 */
 
@@ -126,6 +126,31 @@ register_deactivation_hook(__FILE__, 'wc_sspaa_deactivate');
 function wc_sspaa_log($message)
 {
     $timestamp = date("Y-m-d H:i:s");
-    error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__) . 'debug.log');
+    $log_file = plugin_dir_path(__FILE__) . 'debug.log';
+    $max_age_days = 4;
+    $max_age_seconds = $max_age_days * 86400;
+    $now = time();
+    $new_log_entry = "[$timestamp] $message\n";
+
+    // Purge old log entries (older than 4 days) before writing
+    if (file_exists($log_file)) {
+        $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $retained_lines = [];
+        foreach ($lines as $line) {
+            if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $matches)) {
+                $entry_time = strtotime($matches[1]);
+                if ($entry_time !== false && ($now - $entry_time) <= $max_age_seconds) {
+                    $retained_lines[] = $line;
+                }
+            } else {
+                // If the line does not match the expected format, keep it for safety
+                $retained_lines[] = $line;
+            }
+        }
+        // Write back only the retained lines
+        file_put_contents($log_file, implode("\n", $retained_lines) . "\n", LOCK_EX);
+    }
+    // Append the new log entry
+    file_put_contents($log_file, $new_log_entry, FILE_APPEND | LOCK_EX);
 }
 ?>
