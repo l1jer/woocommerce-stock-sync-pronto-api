@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.6
+**Stable tag:** 1.3.7
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -53,6 +53,9 @@ The plugin processes stock updates in batches, updating a specified number of pr
 If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
 ## Changelog
+
+### 1.3.7
+* Fixed issue where not all products were synchronised if the product count exceeded the hardcoded batch limit. Batch scheduling is now fully dynamic and robust, ensuring every product (including all types and variations) is included in the daily sync cycle. Improved debug logging for batch scheduling and product coverage.
 
 ### 1.3.6
 * Fixed bug where scheduled sync (cron) could use incorrect API credentials if HTTP_HOST was not set. Now uses the selected domain from Stock Sync Status page as fallback.

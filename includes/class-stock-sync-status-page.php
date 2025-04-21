@@ -327,9 +327,10 @@ class WC_SSPAA_Stock_Sync_Status_Page {
                 AND pm.meta_value != ''"
             );
             
-            // Calculate total batches
-            $batch_size = 15; // Same as in wc_sspaa_init()
+            // Calculate total batches dynamically
+            $batch_size = 15; // Must match the main plugin
             $total_batches = ceil($products_with_skus / $batch_size);
+            wc_sspaa_log('[Status Page] Total products with SKUs: ' . $products_with_skus . ', Batch size: ' . $batch_size . ', Total batches: ' . $total_batches);
             
             // Get next scheduled batch time
             $next_batch = wp_next_scheduled('wc_sspaa_update_stock_batch', array(0));

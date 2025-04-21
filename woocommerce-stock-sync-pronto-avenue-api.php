@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with batch processing.
-Version: 1.3.6
+Version: 1.3.7
 Author: Jerry Li
 */
 
@@ -45,25 +45,35 @@ function wc_sspaa_schedule_batches()
     $sydney_timezone = new DateTimeZone('Australia/Sydney');
     $utc_timezone = new DateTimeZone('UTC');
     
+    global $wpdb;
+    // Get total number of products with SKUs
+    $products_with_skus = $wpdb->get_var(
+        "SELECT COUNT(DISTINCT p.ID) 
+        FROM {$wpdb->postmeta} pm
+        JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+        WHERE pm.meta_key = '_sku' 
+        AND p.post_type IN ('product', 'product_variation')
+        AND pm.meta_value != ''"
+    );
+    $batch_size = 15;
+    $total_batches = ceil($products_with_skus / $batch_size);
+    wc_sspaa_log("Total products with SKUs: {$products_with_skus}, Batch size: {$batch_size}, Total batches: {$total_batches}");
+
     // Generate batch times
     $batch_times = [];
-    for ($i = 0; $i < 11; $i++) {
-        $offset = $i * 15;
-        
+    for ($i = 0; $i < $total_batches; $i++) {
+        $offset = $i * $batch_size;
         // Calculate time (add 30 minutes between each batch)
         $time_parts = explode(':', $sync_time);
         $hours = (int)$time_parts[0];
         $minutes = (int)$time_parts[1];
         $seconds = (int)$time_parts[2];
-        
         // Add 30 minutes for each batch
         $minutes += ($i * 30);
-        
         // Handle overflow
         $hours += floor($minutes / 60);
         $minutes = $minutes % 60;
         $hours = $hours % 24;
-        
         $batch_time = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
         $batch_times[] = ['time' => $batch_time, 'offset' => $offset];
     }
@@ -76,15 +86,12 @@ function wc_sspaa_schedule_batches()
         if (!wp_next_scheduled('wc_sspaa_update_stock_batch', array($batch['offset']))) {
             // Create Sydney datetime with the batch time
             $sydney_datetime = new DateTime($today_date . ' ' . $batch['time'], $sydney_timezone);
-            
             // Convert to UTC for scheduling
             $sydney_datetime->setTimezone($utc_timezone);
             $utc_timestamp = $sydney_datetime->getTimestamp();
-            
             wc_sspaa_log('Scheduling batch with offset: ' . $batch['offset'] . 
                 ' at Sydney time: ' . $batch['time'] . 
                 ' (UTC time: ' . $sydney_datetime->format('Y-m-d H:i:s') . ')');
-            
             wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
         } else {
             wc_sspaa_log('Batch with offset ' . $batch['offset'] . ' is already scheduled.');
