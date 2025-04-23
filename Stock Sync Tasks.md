@@ -44,6 +44,40 @@ Review, understand, and analyse the existing project, then implement the followi
       [2025-04-19 19:31:00] Processing batch with offset: 135
       [2025-04-19 20:00:38] Processing batch with offset: 150
    - [x] **1.3.8** Implement a mechanism so that the plugin's debug.log file only retains log entries from the last 4 days. Older log entries (older than 4 days from the current date/time) should be automatically deleted or purged on a regular basis, ensuring the log file remains current and does not grow indefinitely.
+   - [ ] **1.3.9** Examine and address the problem where deactivating and reactivating the plugin fails to fully remove all scheduled actions (cron jobs) associated with stock sync batches. On plugin deactivation, guarantee that every scheduled batch event is thoroughly and reliably cleared, preventing any leftover or duplicate scheduled actions when the plugin is reactivated. Ensure comprehensive debug logging is in place to verify the removal of all scheduled events, and upon reactivation, confirm that only the correct, newly scheduled batch events exist. Review the current deactivation logic, pinpoint any deficiencies, and apply a best-practice approach to ensure a pristine state for scheduled actions during every deactivate/reactivate cycle.
+      [2025-04-22 14:31:43] Deactivating plugin and clearing scheduled events.
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 0
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 15
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 30
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 45
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 60
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 75
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 90
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 105
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 120
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 135
+      [2025-04-22 14:31:43] Clearing scheduled batch with offset: 150
+      [2025-04-22 14:31:51] Scheduling batch processing.
+      [2025-04-22 14:31:51] Using sync time: 15:29:00
+      [2025-04-22 14:31:51] Total products with SKUs: 190, Batch size: 15, Total batches: 13
+      [2025-04-22 14:31:51] Scheduling batch with offset: 0 at Sydney time: 15:29:00 (UTC time: 2025-04-23 05:29:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 15 at Sydney time: 15:59:00 (UTC time: 2025-04-23 05:59:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 30 at Sydney time: 16:29:00 (UTC time: 2025-04-23 06:29:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 45 at Sydney time: 16:59:00 (UTC time: 2025-04-23 06:59:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 60 at Sydney time: 17:29:00 (UTC time: 2025-04-23 07:29:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 75 at Sydney time: 17:59:00 (UTC time: 2025-04-23 07:59:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 90 at Sydney time: 18:29:00 (UTC time: 2025-04-23 08:29:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 105 at Sydney time: 18:59:00 (UTC time: 2025-04-23 08:59:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 120 at Sydney time: 19:29:00 (UTC time: 2025-04-23 09:29:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 135 at Sydney time: 19:59:00 (UTC time: 2025-04-23 09:59:00)
+      [2025-04-22 14:31:51] Scheduling batch with offset: 150 at Sydney time: 20:29:00 (UTC time: 2025-04-23 10:29:00)
+      [2025-04-22 14:31:51] Batch with offset 165 is already scheduled.
+      [2025-04-22 14:31:51] Scheduling batch with offset: 180 at Sydney time: 21:29:00 (UTC time: 2025-04-23 11:29:00)
+      ----------------------------------------
+      As seen in the debug log: "Processing batch with offset:" entries progress sequentially for offsets 0 through 120, then jump to 165, 135, and 150, after which no further batches are processed. Even though the total product count is 190, some products are not synchronised.
+
+      **Action Required:**  
+      Perform a comprehensive review of the batch scheduling and processing logic. Determine the underlying cause for missing or unscheduled batches, which leads to unsynchronised products. Ensure the batch system consistently includes all products (covering every type and variation) in each sync cycle, regardless of the total product count. Strengthen logging and validation to verify that every product is scheduled and processed in the sync. Deliver a detailed analysis of the issue and implement or recommend a solution that guarantees all products are synchronised in every future cycle.
 
 <!-- Archived -->
    - [ ] Implement a button on the All Products admin page titled "Sync All Products Now". Upon clicking this button, the following actions should occur:

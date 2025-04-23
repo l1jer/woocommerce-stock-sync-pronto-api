@@ -330,7 +330,7 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             // Calculate total batches dynamically
             $batch_size = 15; // Must match the main plugin
             $total_batches = ceil($products_with_skus / $batch_size);
-            wc_sspaa_log('[Status Page] Total products with SKUs: ' . $products_with_skus . ', Batch size: ' . $batch_size . ', Total batches: ' . $total_batches);
+            // wc_sspaa_log('[Status Page] Total products with SKUs: ' . $products_with_skus . ', Batch size: ' . $batch_size . ', Total batches: ' . $total_batches);
             
             // Get next scheduled batch time
             $next_batch = wp_next_scheduled('wc_sspaa_update_stock_batch', array(0));
@@ -458,12 +458,38 @@ class WC_SSPAA_Stock_Sync_Status_Page {
     private function reschedule_batches($sync_time) {
         global $wpdb;
         
-        // Clear existing scheduled events
-        $batch_times = [];
-        for ($i = 0; $i < 11; $i++) {
-            $offset = $i * 15;
+        // Get total number of products with SKUs
+        $products_with_skus = $wpdb->get_var(
+            "SELECT COUNT(DISTINCT p.ID) 
+            FROM {$wpdb->postmeta} pm
+            JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            WHERE pm.meta_key = '_sku' 
+            AND p.post_type IN ('product', 'product_variation')
+            AND pm.meta_value != ''"
+        );
+        $batch_size = 15;
+        $total_batches = ceil($products_with_skus / $batch_size);
+        wc_sspaa_log('[Reschedule] Total products with SKUs: ' . $products_with_skus . ', Batch size: ' . $batch_size . ', Total batches: ' . $total_batches);
+
+        // Clear all existing scheduled events for all possible offsets
+        for ($i = 0; $i < $total_batches; $i++) {
+            $offset = $i * $batch_size;
+            wc_sspaa_log('[Reschedule] Clearing scheduled batch with offset: ' . $offset);
             wp_clear_scheduled_hook('wc_sspaa_update_stock_batch', array($offset));
-            
+        }
+        // Also clear any old batches beyond the current total_batches (e.g., if product count decreased)
+        for ($i = $total_batches; $i < 100; $i++) { // Arbitrary upper limit for safety
+            $offset = $i * $batch_size;
+            if (wp_next_scheduled('wc_sspaa_update_stock_batch', array($offset))) {
+                wc_sspaa_log('[Reschedule] Clearing old scheduled batch with offset: ' . $offset);
+                wp_clear_scheduled_hook('wc_sspaa_update_stock_batch', array($offset));
+            }
+        }
+
+        // Generate and schedule new batch events
+        $batch_times = [];
+        for ($i = 0; $i < $total_batches; $i++) {
+            $offset = $i * $batch_size;
             // Calculate new time (add 30 minutes between each batch)
             $time_parts = explode(':', $sync_time);
             $hours = (int)$time_parts[0];
@@ -477,7 +503,6 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             $hours += floor($minutes / 60);
             $minutes = $minutes % 60;
             $hours = $hours % 24;
-            
             $new_time = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
             $batch_times[] = ['time' => $new_time, 'offset' => $offset];
         }
@@ -499,7 +524,7 @@ class WC_SSPAA_Stock_Sync_Status_Page {
                 // Convert to UTC for scheduling
                 $sydney_datetime->setTimezone($utc_timezone);
                 $utc_timestamp = $sydney_datetime->getTimestamp();
-                
+                wc_sspaa_log('[Reschedule] Scheduling batch with offset: ' . $batch['offset'] . ' at Sydney time: ' . $batch['time'] . ' (UTC time: ' . $sydney_datetime->format('Y-m-d H:i:s') . ')');
                 wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_update_stock_batch', array($batch['offset']));
             }
         }

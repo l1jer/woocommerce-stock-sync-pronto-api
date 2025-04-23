@@ -54,6 +54,12 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 ## Changelog
 
+### 1.3.9
+* Fixed issue where scheduled sync batches could stop at offset 150 even if more products existed. Batch clearing and rescheduling is now fully dynamic, ensuring all required batches are always scheduled and executed. Added robust debug logging for batch scheduling and validation.
+
+### 1.3.8
+* Added automatic log retention: debug.log now only retains log entries from the last 4 days. Older entries are purged automatically before each new log write, ensuring the log file remains current and does not grow indefinitely.
+
 ### 1.3.7
 * Fixed issue where not all products were synchronised if the product count exceeded the hardcoded batch limit. Batch scheduling is now fully dynamic and robust, ensuring every product (including all types and variations) is included in the daily sync cycle. Improved debug logging for batch scheduling and product coverage.
 
@@ -180,5 +186,3 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 * Log detailed debug information for troubleshooting.
 * Handle API rate limits and server execution time constraints.
 
-### 1.3.8
-* Added automatic log retention: debug.log now only retains log entries from the last 4 days. Older entries are purged automatically before each new log write, ensuring the log file remains current and does not grow indefinitely.
