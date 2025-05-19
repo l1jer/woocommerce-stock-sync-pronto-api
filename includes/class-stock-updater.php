@@ -66,7 +66,11 @@ class WC_SSPAA_Stock_Updater
             $this->log("Processing product ID: {$product_id}, Type: {$product_type}, Parent: {$parent_id}, SKU: {$sku}");
 
             $response = $this->api_handler->get_product_data($sku);
-            $this->log('Raw API response for SKU ' . $sku . ': ' . json_encode($response));
+            // It's important to log the raw response *before* any conditional checks on its structure.
+            // This helps in debugging cases where the response might be unexpected (e.g., error messages not in JSON format).
+            // Ensuring the response is a string before logging in case it's null or another type.
+            $raw_response_for_log = is_string($response) ? $response : json_encode($response);
+            $this->log('Raw API response for SKU ' . $sku . ': ' . $raw_response_for_log);
 
             if (isset($response['products']) && !empty($response['products'])) {
                 $product_data = $response['products'][0];
@@ -98,12 +102,20 @@ class WC_SSPAA_Stock_Updater
                 if ($product_type === 'product_variation' && $parent_id > 0) {
                     $this->update_parent_product_stock($parent_id);
                 }
-
-                // Throttle the requests to respect the rate limit
-                usleep($this->delay);
             } else {
-                $this->log('No product data found for SKU: ' . $sku);
+                // Log if product data is not found or response is empty/invalid
+                // This case is now handled by the logging of raw_response_for_log above,
+                // but an additional specific log here can be useful.
+                if ($response === null) {
+                    $this->log('No response or API error for SKU: ' . $sku . '. Check previous logs for API errors or JSON decode issues.');
+                } else {
+                    $this->log('No product data found in API response for SKU: ' . $sku);
+                }
             }
+            
+            // Throttle the requests to respect the rate limit AFTER every API call attempt
+            $this->log("Preparing to delay for {$this->delay} microseconds to respect API rate limit.");
+            usleep($this->delay);
         }
 
         $next_offset = $offset + $this->batch_size;

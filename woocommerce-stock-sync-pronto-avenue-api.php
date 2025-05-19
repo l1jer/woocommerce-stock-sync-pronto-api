@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with batch processing.
-Version: 1.3.8
+Version: 1.3.10
 Author: Jerry Li
 */
 
@@ -27,7 +27,7 @@ register_activation_hook(__FILE__, 'wc_sspaa_activate');
 function wc_sspaa_init()
 {
     $api_handler = new WC_SSPAA_API_Handler();
-    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 2000000, 15, 2000000, 15, 25, false); // Set enable_debug to false
+    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 3000000, 15, 2000000, 15, 25, false); // Set enable_debug to false
 
     add_action('wc_sspaa_update_stock_batch', 'wc_sspaa_process_batch', 10, 1); // Hook the batch processing function
 }
@@ -103,7 +103,7 @@ function wc_sspaa_process_batch($batch_offset)
 {
     wc_sspaa_log('Processing batch with offset: ' . $batch_offset);
     $api_handler = new WC_SSPAA_API_Handler();
-    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 2000000, 15, 2000000, 15, 25, true);
+    $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 3000000, 15, 2000000, 15, 25, true);
     $stock_updater->update_stock($batch_offset);
     // Removed scheduling of new events from within the batch processing function
 }

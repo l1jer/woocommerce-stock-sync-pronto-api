@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.8
+**Stable tag:** 1.3.10
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -54,8 +54,11 @@ If a product's stock quantity is negative, the plugin updates the stock quantity
 
 ## Changelog
 
+### 1.3.10
+* Adjusted API call delay to 3 seconds (3,000,000 microseconds) for both scheduled cron sync and manual "Sync Product" button actions to further mitigate rate limiting issues. This provides a more conservative approach to API interaction.
+
 ### 1.3.9
-* Fixed issue where scheduled sync batches could stop at offset 150 even if more products existed. Batch clearing and rescheduling is now fully dynamic, ensuring all required batches are always scheduled and executed. Added robust debug logging for batch scheduling and validation.
+* Resolved API rate limiting (HTTP 429) errors during stock synchronisation by ensuring a 2-second delay is strictly enforced after every API call attempt within batch processing, regardless of the API call's success or failure. This prevents cascading errors when the API's limit of "1 request per 2 seconds" is hit. Added more detailed logging around API calls and delays.
 
 ### 1.3.8
 * Added automatic log retention: debug.log now only retains log entries from the last 4 days. Older entries are purged automatically before each new log write, ensuring the log file remains current and does not grow indefinitely.

@@ -125,6 +125,17 @@ class WC_SSPAA_Stock_Sync_Time_Col
             wp_send_json_error(array('message' => 'Permission denied'));
             return;
         }
+
+        $lock_transient_key = 'wc_sspaa_manual_sync_active_lock';
+        $lock_timeout = 30; // Lock for 30 seconds (API call + delay + buffer)
+
+        if (get_transient($lock_transient_key)) {
+            wc_sspaa_log('Manual sync: Another sync operation is currently locked. Aborting.');
+            wp_send_json_error(array('message' => __('Another sync operation is currently in progress. Please try again in a moment.', 'woocommerce')));
+            return;
+        }
+
+        set_transient($lock_transient_key, true, $lock_timeout);
         
         $product_id = isset($_POST['product_id']) ? absint($_POST['product_id']) : 0;
         $sku = isset($_POST['sku']) ? sanitize_text_field($_POST['sku']) : '';
@@ -132,6 +143,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
         wc_sspaa_log('Processing sync request - Product ID: ' . $product_id . ', SKU: ' . $sku);
         
         if (!$product_id || !$sku) {
+            delete_transient($lock_transient_key); // Release lock
             wc_sspaa_log('Error: Invalid product ID or SKU for single product sync');
             wp_send_json_error(array('message' => 'Invalid product ID or SKU'));
             return;
@@ -149,9 +161,14 @@ class WC_SSPAA_Stock_Sync_Time_Col
             wc_sspaa_log('Fetching product data from API for SKU: ' . $sku);
             
             $response = $api_handler->get_product_data($sku);
+            // Add a 3-second delay after the API call for manual sync
+            wc_sspaa_log('Manual sync: Preparing to delay for 3 seconds to respect API rate limit.');
+            usleep(3000000); // 3 seconds delay
+
             wc_sspaa_log('API Response: ' . json_encode($response));
             
             if (!$response || !isset($response['products']) || empty($response['products'])) {
+                delete_transient($lock_transient_key); // Release lock
                 wc_sspaa_log('Error: No product data found for SKU: ' . $sku);
                 wp_send_json_error(array('message' => 'No product data found'));
                 return;
@@ -185,6 +202,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
                 $this->update_parent_product_stock($parent_id);
             }
             
+            delete_transient($lock_transient_key); // Release lock
             wc_sspaa_log('Successfully updated stock for product ID: ' . $product_id);
             
             wp_send_json_success(array(
@@ -193,6 +211,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
             ));
             
         } catch (Exception $e) {
+            delete_transient($lock_transient_key); // Ensure lock is released on error
             wc_sspaa_log('Error syncing product ID: ' . $product_id . ' - ' . $e->getMessage());
             wp_send_json_error(array('message' => 'Error syncing product: ' . $e->getMessage()));
         }
