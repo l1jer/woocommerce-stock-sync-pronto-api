@@ -114,12 +114,12 @@ jQuery(document).ready(function($) {
                         // Update products with SKUs
                         $('#wc-sspaa-products-with-skus').text(data.products_with_skus);
                         
-                        // Update total batches
-                        $('#wc-sspaa-total-batches').text(data.total_batches);
+                        // Update sync method (no longer batch-based)
+                        $('#wc-sspaa-sync-method').text(data.sync_method);
                         
-                        // Update next batch time
-                        $('#wc-sspaa-next-batch-utc').text('UTC: ' + data.next_batch_utc);
-                        $('#wc-sspaa-next-batch-sydney').text('Sydney: ' + data.next_batch_sydney);
+                        // Update next sync time
+                        $('#wc-sspaa-next-sync-utc').text('UTC: ' + data.next_sync_utc);
+                        $('#wc-sspaa-next-sync-sydney').text('Sydney: ' + data.next_sync_sydney);
                         
                         // Update last sync time
                         $('#wc-sspaa-last-sync-utc').text('UTC: ' + data.last_sync_utc);
@@ -178,10 +178,10 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     if (response.success) {
-                        showNotice('Sync time saved successfully. Batches have been rescheduled.', 'success');
+                        showNotice('Sync time saved successfully. Daily sync has been rescheduled.', 'success');
                         $('#wc-sspaa-sync-time-utc').text('UTC: ' + response.data.utc_time);
                         
-                        // Refresh stats after a short delay to get the new batch times
+                        // Refresh stats after a short delay to get the new sync times
                         setTimeout(fetchSyncStats, 1000);
                     } else {
                         showNotice('Error saving sync time: ' + response.data.message, 'error');
@@ -198,27 +198,19 @@ jQuery(document).ready(function($) {
         
         // Function to test API connection
         function testApiConnection() {
-            const domain = $('#wc-sspaa-api-site-select').val();
-            
-            if (!domain) {
-                showNotice('Please select a website to test the connection.', 'error');
-                return;
-            }
-            
-            // Clear previous test result
-            $('#wc-sspaa-api-test-result').removeClass('success failure').html('');
-            
-            // Disable button during test
-            $('#wc-sspaa-test-api-connection').prop('disabled', true).text('Testing...');
-            
             // Test connection via AJAX
             $.ajax({
                 url: wcSspaaAdmin.ajaxUrl,
                 type: 'POST',
                 data: {
                     action: 'wc_sspaa_test_api_connection',
-                    nonce: wcSspaaAdmin.nonce,
-                    domain: domain
+                    nonce: wcSspaaAdmin.nonce
+                },
+                beforeSend: function() {
+                    // Clear previous test result
+                    $('#wc-sspaa-api-test-result').removeClass('success failure').html('');
+                    // Disable button during test
+                    $('#wc-sspaa-test-api-connection').prop('disabled', true).text('Testing...');
                 },
                 success: function(response) {
                     if (response.success) {
@@ -251,37 +243,48 @@ jQuery(document).ready(function($) {
             });
         }
         
-        // Function to update API credentials when domain selection changes
-        function updateApiCredentials() {
-            const domain = $('#wc-sspaa-api-site-select').val();
+        // Function to sync all products immediately
+        function syncAllProducts() {
+            // Disable button and show progress
+            $('#wc-sspaa-sync-all-products').prop('disabled', true).text('Syncing...');
+            $('#wc-sspaa-sync-all-spinner').addClass('is-active');
+            $('#wc-sspaa-sync-progress').show();
             
-            if (!domain) {
-                return;
-            }
+            // Clear any previous notices
+            $('.wc-sspaa-notice').remove();
             
-            // Save selected credentials via AJAX
+            // Send AJAX request
             $.ajax({
                 url: wcSspaaAdmin.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'wc_sspaa_save_api_credentials',
-                    nonce: wcSspaaAdmin.nonce,
-                    domain: domain
+                    action: 'wc_sspaa_sync_all_products',
+                    nonce: wcSspaaAdmin.nonce
                 },
+                timeout: 0, // No timeout - let it run as long as needed
                 success: function(response) {
                     if (response.success) {
-                        // Update credentials display
-                        $('#wc-sspaa-api-username').text(response.data.username);
-                        $('#wc-sspaa-api-password').text(response.data.password);
+                        showNotice('✅ ' + response.data.message, 'success');
                         
-                        // Show success message
-                        showNotice('API credentials updated successfully', 'success');
+                        // Refresh stats after sync completion
+                        setTimeout(fetchSyncStats, 2000);
                     } else {
-                        showNotice('Error updating API credentials: ' + response.data.message, 'error');
+                        showNotice('❌ Error: ' + response.data.message, 'error');
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
-                    showNotice('Network error occurred when updating credentials: ' + textStatus, 'error');
+                    let errorMsg = 'Network error occurred: ' + textStatus;
+                    if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+                        errorMsg = jqXHR.responseJSON.data.message;
+                    }
+                    showNotice('❌ ' + errorMsg, 'error');
+                    console.error('AJAX Error:', textStatus, errorThrown, jqXHR);
+                },
+                complete: function() {
+                    // Re-enable button and hide progress
+                    $('#wc-sspaa-sync-all-products').prop('disabled', false).text('Sync All Products Now');
+                    $('#wc-sspaa-sync-all-spinner').removeClass('is-active');
+                    $('#wc-sspaa-sync-progress').hide();
                 }
             });
         }
@@ -289,9 +292,9 @@ jQuery(document).ready(function($) {
         // Function to show notices
         function showNotice(message, type) {
             const $notice = $('<div class="wc-sspaa-notice ' + type + '">')
-                .text(message)
+                .html(message)
                 .prependTo('.wc-sspaa-settings-container')
-                .delay(5000)
+                .delay(10000) // Show longer for sync completion messages
                 .fadeOut(400, function() { $(this).remove(); });
         }
         
@@ -299,7 +302,7 @@ jQuery(document).ready(function($) {
         $('#wc-sspaa-sync-time').on('change input', updateSyncTimeUTC);
         $('#wc-sspaa-save-time').on('click', saveSyncTime);
         $('#wc-sspaa-test-api-connection').on('click', testApiConnection);
-        $('#wc-sspaa-api-site-select').on('change', updateApiCredentials);
+        $('#wc-sspaa-sync-all-products').on('click', syncAllProducts);
         
         // Initialize
         updateTimeDisplays();

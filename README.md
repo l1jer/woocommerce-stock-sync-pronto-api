@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.10
+**Stable tag:** 1.3.15
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -13,46 +13,39 @@ Synchronize your WooCommerce product stock levels with an external API seamlessl
 
 ## Description
 
-WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. Here's what it does:
+WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. 
 
-* Fetches all product data from the external API and updates WooCommerce stock levels.
-* Handles large product catalogs and respects API rate limits with batch processing.
-* Updates stock levels daily at 2 AM.
-* Logs detailed debug information for troubleshooting.
-
-## Installation
-
-1. Download and install this plugin from the Plugins -> Add New admin screen.
-2. Create a `config.php` file in the plugin directory with the following content:
-    ```php
-    <?php
-    define('WCAP_API_URL', 'https://example.com/api/json/product/v4.json');
-    define('WCAP_API_USERNAME', 'jerryjerryjerry');
-    define('WCAP_API_PASSWORD', 'passpasspass');
-    ?>
-    ```
-3. Add `config.php` to your `.gitignore` file to exclude it from version control.
-4. Activate the plugin through the 'Plugins' screen in WordPress.
-
-## Frequently Asked Questions
-
-### How does this plugin update stock levels?
-
-The plugin fetches product data from the external API and processes it in batches to update the stock levels of WooCommerce products.
-
-### How often does the plugin fetch data from the API?
-
-The plugin is scheduled to fetch data from the API daily at 2 AM.
-
-### How does the batch processing work?
-
-The plugin processes stock updates in batches, updating a specified number of products in each batch. This ensures that the server execution time limits are not exceeded. If the execution time limit is reached, the plugin schedules the next batch to continue processing.
-
-### What happens if a product's stock quantity is negative?
-
-If a product's stock quantity is negative, the plugin updates the stock quantity to 0 to prevent negative stock levels in WooCommerce.
 
 ## Changelog
+
+### 1.3.15
+* **FIXED:** Resolved PHP fatal error on Stock Sync Status page when accessing simplified static API credentials
+* Removed dynamic website-based API credential selection system in favour of static credentials
+* Simplified API credentials management to use single username/password pair from config.php
+* Updated Stock Sync Status page to display static credentials without dropdown selection
+* Cleaned up unused AJAX handlers and JavaScript functions related to dynamic credential selection
+* Improved code maintainability by removing complex domain-based credential switching logic
+
+### 1.3.13
+* **NEW:** Implemented dedicated logging system using `wc-sspaa-debug.log` file within plugin directory
+* **NEW:** Added immediate "Sync All Products Now" button in Stock Sync Status page for manual synchronisation
+* Enhanced logging with proper file permissions and error handling for better debugging
+* AJAX-based manual sync with real-time progress feedback and error handling
+* Improved user experience with visual progress indicators and success/error notifications
+* Maintains 3-second delay between API calls for rate limit compliance during manual sync
+* Added locking mechanism to prevent multiple concurrent sync operations
+
+### 1.3.12
+* **MAJOR UPDATE:** Removed batch processing system and implemented sequential synchronisation
+* All products are now processed in a single daily sync operation with 15-second delays between API calls
+* Replaced multiple scheduled batch events with a single daily sync event
+* Improved reliability by ensuring all products are processed in each sync cycle
+* Enhanced logging with detailed progress tracking (processed count, success/failure rates)
+* Updated admin interface to reflect sequential processing instead of batch-based approach
+* Simplified cron scheduling - now uses single daily event instead of multiple batch events
+* Added completion tracking with `wc_sspaa_last_sync_completion` option
+* Improved API rate limit compliance with consistent 15-second delays between requests
+* Updated Stock Sync Status page to show sync method and remove batch-related information
 
 ### 1.3.10
 * Adjusted API call delay to 3 seconds (3,000,000 microseconds) for both scheduled cron sync and manual "Sync Product" button actions to further mitigate rate limiting issues. This provides a more conservative approach to API interaction.

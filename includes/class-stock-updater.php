@@ -21,26 +21,30 @@ class WC_SSPAA_Stock_Updater
         $this->enable_debug = $enable_debug;
     }
 
-    public function update_stock($offset)
+    /**
+     * Update all products sequentially without batch limitations
+     */
+    public function update_all_products()
     {
         global $wpdb;
 
-        // Fetch products from WooCommerce with pagination
+        // Fetch all products from WooCommerce that have SKUs
         $products = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
-                FROM {$wpdb->postmeta} pm
-                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                WHERE pm.meta_key='_sku' 
-                AND p.post_type IN ('product', 'product_variation')
-                AND pm.meta_value != ''
-                ORDER BY p.ID ASC LIMIT %d OFFSET %d",
-                $this->batch_size,
-                $offset
-            )
+            "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
+            FROM {$wpdb->postmeta} pm
+            JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            WHERE pm.meta_key='_sku' 
+            AND p.post_type IN ('product', 'product_variation')
+            AND pm.meta_value != ''
+            ORDER BY p.ID ASC"
         );
 
-        $this->log('Number of products fetched: ' . count($products));
+        $total_products = count($products);
+        $this->log('Starting sequential sync for ' . $total_products . ' products with SKUs');
+        
+        $processed_count = 0;
+        $successful_syncs = 0;
+        $failed_syncs = 0;
         $processed_products = array();
 
         foreach ($products as $product) {
@@ -57,18 +61,17 @@ class WC_SSPAA_Stock_Updater
 
             // Add to processed products
             $processed_products[] = $product_id;
+            $processed_count++;
 
             if (empty($sku)) {
                 $this->log("Skipping product ID: {$product_id} with empty SKU.");
+                $failed_syncs++;
                 continue;
             }
 
-            $this->log("Processing product ID: {$product_id}, Type: {$product_type}, Parent: {$parent_id}, SKU: {$sku}");
+            $this->log("Processing product {$processed_count}/{$total_products} - ID: {$product_id}, Type: {$product_type}, Parent: {$parent_id}, SKU: {$sku}");
 
             $response = $this->api_handler->get_product_data($sku);
-            // It's important to log the raw response *before* any conditional checks on its structure.
-            // This helps in debugging cases where the response might be unexpected (e.g., error messages not in JSON format).
-            // Ensuring the response is a string before logging in case it's null or another type.
             $raw_response_for_log = is_string($response) ? $response : json_encode($response);
             $this->log('Raw API response for SKU ' . $sku . ': ' . $raw_response_for_log);
 
@@ -102,10 +105,11 @@ class WC_SSPAA_Stock_Updater
                 if ($product_type === 'product_variation' && $parent_id > 0) {
                     $this->update_parent_product_stock($parent_id);
                 }
+                
+                $successful_syncs++;
+                $this->log("Successfully synced product {$processed_count}/{$total_products} - SKU: {$sku}");
             } else {
-                // Log if product data is not found or response is empty/invalid
-                // This case is now handled by the logging of raw_response_for_log above,
-                // but an additional specific log here can be useful.
+                $failed_syncs++;
                 if ($response === null) {
                     $this->log('No response or API error for SKU: ' . $sku . '. Check previous logs for API errors or JSON decode issues.');
                 } else {
@@ -113,26 +117,27 @@ class WC_SSPAA_Stock_Updater
                 }
             }
             
-            // Throttle the requests to respect the rate limit AFTER every API call attempt
-            $this->log("Preparing to delay for {$this->delay} microseconds to respect API rate limit.");
-            usleep($this->delay);
+            // Apply delay after each API call to respect rate limits
+            if ($this->delay > 0) {
+                $this->log("Applying {$this->delay} microsecond delay to respect API rate limit.");
+                usleep($this->delay);
+            }
         }
 
-        $next_offset = $offset + $this->batch_size;
-        $next_products = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT ID FROM {$wpdb->postmeta}
-                JOIN {$wpdb->posts} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id
-                WHERE meta_key='_sku' AND post_type IN ('product', 'product_variation')
-                AND meta_value != ''
-                ORDER BY ID ASC LIMIT %d OFFSET %d",
-                $this->batch_size,
-                $next_offset
-            )
-        );
+        $this->log("Sync completed. Total: {$total_products}, Processed: {$processed_count}, Successful: {$successful_syncs}, Failed: {$failed_syncs}");
+        
+        // Save completion time
+        update_option('wc_sspaa_last_sync_completion', current_time('mysql'));
+    }
 
-        // Ensure batch processes are not scheduled multiple times if they already exist.
-        // Removed scheduling of next batch to prevent multiple events
+    /**
+     * Legacy method for batch processing (kept for backward compatibility)
+     */
+    public function update_stock($offset = 0)
+    {
+        // This method is now deprecated but kept for compatibility
+        $this->log('Warning: update_stock with offset is deprecated. Use update_all_products() instead.');
+        $this->update_all_products();
     }
 
     /**
@@ -193,7 +198,19 @@ class WC_SSPAA_Stock_Updater
     {
         if ($this->enable_debug) {
             $timestamp = date('Y-m-d H:i:s');
-            error_log("[$timestamp] $message\n", 3, plugin_dir_path(__FILE__) . '../debug.log');
+            $log_file = plugin_dir_path(__FILE__) . '../wc-sspaa-debug.log'; // Use dedicated log file
+            
+            // Ensure proper file permissions and create file if it doesn't exist
+            if (!file_exists($log_file)) {
+                if (touch($log_file)) {
+                    chmod($log_file, 0644);
+                }
+            }
+            
+            // Write to dedicated log file
+            if (is_writable($log_file) || is_writable(dirname($log_file))) {
+                error_log("[$timestamp] $message\n", 3, $log_file);
+            }
         }
     }
 }
