@@ -124,6 +124,11 @@ jQuery(document).ready(function($) {
                         // Update last sync time
                         $('#wc-sspaa-last-sync-utc').text('UTC: ' + data.last_sync_utc);
                         $('#wc-sspaa-last-sync-sydney').text('Sydney: ' + data.last_sync_sydney);
+                        
+                        // Update sync button text with product count
+                        const productCount = data.products_with_skus;
+                        const buttonText = 'Sync All (' + productCount + ') Products Now';
+                        $('#wc-sspaa-sync-all-products').text(buttonText);
                     } else {
                         showNotice('Error fetching synchronization statistics: ' + response.data.message, 'error');
                     }
@@ -245,6 +250,9 @@ jQuery(document).ready(function($) {
         
         // Function to sync all products immediately
         function syncAllProducts() {
+            // Get current button text to restore later
+            const originalButtonText = $('#wc-sspaa-sync-all-products').text();
+            
             // Disable button and show progress
             $('#wc-sspaa-sync-all-products').prop('disabled', true).text('Syncing...');
             $('#wc-sspaa-sync-all-spinner').addClass('is-active');
@@ -266,7 +274,7 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         showNotice('✅ ' + response.data.message, 'success');
                         
-                        // Refresh stats after sync completion
+                        // Refresh stats after sync completion to get updated button text
                         setTimeout(fetchSyncStats, 2000);
                     } else {
                         showNotice('❌ Error: ' + response.data.message, 'error');
@@ -282,7 +290,7 @@ jQuery(document).ready(function($) {
                 },
                 complete: function() {
                     // Re-enable button and hide progress
-                    $('#wc-sspaa-sync-all-products').prop('disabled', false).text('Sync All Products Now');
+                    $('#wc-sspaa-sync-all-products').prop('disabled', false).text(originalButtonText);
                     $('#wc-sspaa-sync-all-spinner').removeClass('is-active');
                     $('#wc-sspaa-sync-progress').hide();
                 }

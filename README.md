@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.15
+**Stable tag:** 1.3.16
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,13 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.16
+* **ENHANCED:** Updated "Sync All Products" button to dynamically display the total number of products with SKUs
+* Button text now shows format: "Sync All (X) Products Now" where X is the current product count
+* Improved user experience by providing clear indication of how many products will be synchronised
+* Button text updates automatically when the statistics refresh every 30 seconds
+* Enhanced visual feedback for administrators to understand the scope of synchronisation operations
 
 ### 1.3.15
 * **FIXED:** Resolved PHP fatal error on Stock Sync Status page when accessing simplified static API credentials

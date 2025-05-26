@@ -128,6 +128,22 @@ Review, understand, and analyse the existing project, then implement the followi
    - [x] **1.3.13** Modify the logging system to create and write all debug logs to a dedicated log file within the plugin's directory structure (e.g., `wc-sspaa-debug.log`) instead of relying on WordPress's default `debug.log` file in the `wp-content` folder. Ensure proper file permissions, log rotation if necessary, and include timestamps in log entries for better debugging and maintenance.
    - [x] **1.3.14** Implement an immediate AJAX-based "Sync All Products" functionality that processes stock synchronisation directly without scheduling or relying on WordPress CRON jobs. The button should trigger real-time processing with proper progress feedback, error handling, and rate limiting compliance (maintaining the 3-second delay between API calls) to provide instant synchronisation capability for administrators.
    - [x] **1.3.15** **FIXED:** Resolved PHP fatal error on Stock Sync Status page caused by attempting to access dynamic API credentials array that no longer exists. Simplified the system to use static credentials from config.php, removing complex domain-based credential selection functionality and related AJAX handlers. Updated all references to use WCAP_API_USERNAME and WCAP_API_PASSWORD constants instead of the dynamic $wc_sspaa_api_credentials array.
+   - [x] **1.3.16** Update the "Sync All Products" button text to dynamically display the total number of products that will be synchronised. The button should read "Sync All (X) Products" where X is the actual count of products with SKUs that will be processed during the synchronisation.
+   - [ ] **1.3.17** Move the "Sync All Products" button from the Stock Sync Status page to the WooCommerce All Products page (Products > All Products). When the button is clicked, display a live countdown timer that shows the estimated time remaining based on the total number of products to be synchronised, accounting for the 3-second delay between API calls. The timer should update in real-time and provide visual feedback on sync progress. 
+   - [ ] **1.3.18** Remove all functionality from the Stock Sync Status page and completely remove the Stock Sync Status page from the WordPress admin menu. This includes removing the menu registration, page handlers, and associated files. Ensure proper cleanup of any database options or settings related to this page to prevent orphaned data.
+   - [ ] **1.3.19** Implement domain-specific scheduled stock synchronisation with the following daily schedule:
+     - zerotech.com.au: 1:25 AM
+     - zerotechoutdoors.com.au: 1:55 AM  
+     - skywatcheraustralia.com.au: 2:25 AM
+     - nitecoreaustralia.com.au: 2:55 AM
+     
+     Requirements:
+     - Use WordPress CRON to schedule the initial trigger at the specified times
+     - The actual synchronisation process should use AJAX methodology (same as the "Sync All Products" button) so basically it is just a scheduled the "Sync All Products" button function 
+     - Implement domain detection to determine which schedule applies to the current site, as the system is UTC time, I provided time is Sydney time
+     - Include proper error handling and logging for each scheduled sync
+     - Maintain the 3-second delay between API calls during synchronisation
+     - Log the start and completion times for each scheduled sync operation
 
 
 ### Side Project
