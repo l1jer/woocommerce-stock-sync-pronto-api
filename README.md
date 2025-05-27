@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.19
+**Stable tag:** 1.3.20
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,16 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.20
+* **NEW:** Implemented domain-specific daily stock synchronisation schedules.
+* **NEW:** Scheduled sync now triggers an AJAX-like non-blocking background process for actual synchronisation.
+* **ENHANCED:** Sync times are now configurable per domain (store.zerotechoptics.com: 00:25, skywatcheraustralia.com.au: 00:55, zerotech.com.au: 01:25, zerotechoutdoors.com.au: 01:55, nitecoreaustralia.com.au: 02:25 Sydney time), with a default for unlisted domains (03:00 Sydney time).
+* **ENHANCED:** Scheduled synchronisation uses a 3-second delay between API calls, aligning with manual sync AJAX method.
+* **ENHANCED:** Added nonce verification for the cron-triggered AJAX call for improved security.
+* **ENHANCED:** Robust logging for scheduled trigger, AJAX handling, and sync process for each domain.
+* **FIXED:** Uses a shared lock transient (`wc_sspaa_sync_all_active_lock`) to prevent overlap between scheduled syncs and the manual "Sync All Products" button.
+* **CLEANUP:** Removed old `wc_sspaa_sync_time` option usage from scheduling; deactivation clears new cron nonces.
 
 ### 1.3.19
 * **REMOVED:** Removed the "Stock Sync Status" page and all associated functionality.

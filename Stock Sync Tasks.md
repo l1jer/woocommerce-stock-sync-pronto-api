@@ -132,16 +132,17 @@ Review, understand, and analyse the existing project, then implement the followi
    - [x] **1.3.17** Resolved critical logging function issue where the entire log file was being overwritten on every log entry instead of appending. Optimised logging to append entries first and perform cleanup only when needed (randomly 1 in 50 times or when file exceeds 5MB), preventing log loss during high-frequency operations like product synchronisation.
    - [x] **1.3.18** Move the "Sync All Products" button from the Stock Sync Status page to the WooCommerce All Products page (Products > All Products). When the button is clicked, display a live countdown timer that shows the estimated time remaining based on the total number of products to be synchronised, accounting for the 3-second delay between API calls. The timer should update in real-time and provide visual feedback on sync progress. 
    - [x] **1.3.19** Remove all functionality from the Stock Sync Status page and completely remove the Stock Sync Status page from the WordPress admin menu. This includes removing the menu registration, page handlers, and associated files. Ensure proper cleanup of any database options or settings related to this page to prevent orphaned data.
-   - [ ] **1.3.20** Implement domain-specific scheduled stock synchronisation with the following daily schedule:
-     - zerotech.com.au: 1:25 AM
-     - zerotechoutdoors.com.au: 2:25 AM  
-     - skywatcheraustralia.com.au: 3:25 AM
-     - nitecoreaustralia.com.au: 4:25 AM
-     
+   - [x] **1.3.20** Implement domain-specific scheduled stock synchronisation with the following daily schedule:
+     - store.zerotechoptics.com: 00:25
+     - skywatcheraustralia.com.au: 00:55
+     - zerotech.com.au: 01:25
+     - zerotechoutdoors.com.au: 01:55
+     - nitecoreaustralia.com.au: 02:25
+
      Requirements:
      - Use WordPress CRON to schedule the initial trigger at the specified times
      - The actual synchronisation process should use AJAX methodology (same as the "Sync All Products" button) so basically it is just a scheduled the "Sync All Products" button function 
-     - Implement domain detection to determine which schedule applies to the current site, as the system is UTC time, I provided time is Sydney time
+     - Implement domain detection to determine which schedule applies to the current site, as the system is UTC time, I provided time is Sydney time in 24-hour format
      - Include proper error handling and logging for each scheduled sync
      - Maintain the 3-second delay between API calls during synchronisation
      - Log the start and completion times for each scheduled sync operation
