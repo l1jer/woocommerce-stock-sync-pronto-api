@@ -75,37 +75,72 @@ class WC_SSPAA_Stock_Sync_Time_Col
             return;
         }
         
-        $js_path = '../assets/js/admin.js';
-        $js_url = plugins_url($js_path, __FILE__);
-        $js_file = plugin_dir_path(__FILE__) . $js_path;
-        
-        if (!file_exists($js_file)) {
-            wc_sspaa_log('Error: Admin JS file not found at: ' . $js_file);
-            return;
-        }
-        
-        wp_enqueue_script(
-            'wc-sspaa-admin',
-            $js_url,
-            array('jquery'),
-            filemtime($js_file),
-            true
-        );
-        
+        // Data for our inline script
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('wc_sspaa_sync_nonce')
         );
         
-        wp_localize_script('wc-sspaa-admin', 'wcSspaaAdmin', $script_data);
+        // Add inline script for the single product sync button
+        $inline_js = "
+            jQuery(document).ready(function($) {
+                $(document).on('click', '.wc-sspaa-sync-stock', function(e) {
+                    e.preventDefault();
+                    var \$button = $(this);
+                    var \$container = \$button.closest('.wc-sspaa-sync-container');
+                    var \$spinner = \$container.find('.spinner');
+                    var \$lastSyncSpan = \$container.find('.wc-sspaa-last-sync');
+                    
+                    // Remove previous notices
+                    \$container.find('.notice').remove();
+
+                    \$button.prop('disabled', true);
+                    \$spinner.addClass('is-active');
+
+                    $.ajax({
+                        url: wcSspaaColData.ajaxUrl,
+                        type: 'POST',
+                        data: {
+                            action: 'wc_sspaa_sync_single_product',
+                            nonce: wcSspaaColData.nonce,
+                            product_id: \$button.data('product-id'),
+                            sku: \$button.data('sku')
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                \$lastSyncSpan.text(response.data.last_sync).css('color', '#46b450'); // Green for success
+                                \$('<div class=\\'notice updated\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                            } else {
+                                \$lastSyncSpan.css('color', '#dc3232'); // Red for error
+                                \$('<div class=\\'notice error\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            \$lastSyncSpan.css('color', '#dc3232'); // Red for error
+                             \$('<div class=\\'notice error\\'><p>AJAX Error: ' + textStatus + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                        },
+                        complete: function() {
+                            \$button.prop('disabled', false);
+                            \$spinner.removeClass('is-active');
+                        }
+                    });
+                });
+            });
+        ";
+        
+        wp_register_script('wc-sspaa-col-inline-js-handle', ''); // Dummy handle
+        wp_enqueue_script('wc-sspaa-col-inline-js-handle');
+        wp_add_inline_script('wc-sspaa-col-inline-js-handle', $inline_js);
+        wp_localize_script('wc-sspaa-col-inline-js-handle', 'wcSspaaColData', $script_data);
         
         wp_add_inline_style('woocommerce_admin_styles', '
             .wc-sspaa-sync-container { position: relative; }
-            .wc-sspaa-sync-container .spinner { visibility: hidden; margin-left: 4px; }
+            .wc-sspaa-sync-container .spinner { visibility: hidden; margin-left: 4px; vertical-align: middle; }
             .wc-sspaa-sync-container .spinner.is-active { visibility: visible; }
-            .wc-sspaa-sync-container .notice { margin: 5px 0; padding: 5px; }
-            .wc-sspaa-sync-container .updated { background-color: #edfaef; border-left: 4px solid #46b450; }
-            .wc-sspaa-sync-container .error { background-color: #fbeaea; border-left: 4px solid #dc3232; }
+            .wc-sspaa-sync-container .notice { margin: 5px 0; padding: 5px 10px; border-radius: 3px; }
+            .wc-sspaa-sync-container .updated { background-color: #f0f8ff; border-left: 4px solid #46b450; color: #46b450; }
+            .wc-sspaa-sync-container .error { background-color: #fff6f6; border-left: 4px solid #dc3232; color: #dc3232; }
+            .wc-sspaa-last-sync { transition: color 0.3s ease-in-out; }
         ');
     }
     
