@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.17
+**Stable tag:** 1.3.18
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,20 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.18
+* **NEW:** Moved "Sync All Products" button from Stock Sync Status page to WooCommerce All Products page (Products > All Products)
+* **NEW:** Added live countdown timer showing estimated time remaining during synchronisation
+* **NEW:** Implemented real-time progress bar with visual feedback during sync operations
+* **NEW:** Added product counter showing current progress (e.g., "Processing product 15 of 120")
+* **NEW:** Enhanced user experience with confirmation dialog before starting sync
+* **NEW:** Added automatic progress updates every second during synchronisation
+* **NEW:** Improved visual design with modern progress indicators and styling
+* **NEW:** Maintained 3-second delay between API calls for rate limit compliance
+* **NEW:** Added proper cleanup of timers and intervals on page navigation
+* Created new `class-products-page-sync.php` for products page functionality
+* Created new `products-page-sync.js` for countdown timer and progress tracking
+* Enhanced admin interface with better visual feedback and user experience
 
 ### 1.3.17
 * **FIXED:** Resolved critical logging issue where the entire log file was being overwritten on every log entry

@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.17
+Version: 1.3.18
 Author: Jerry Li
 */
 
@@ -17,6 +17,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-api-handler.php'; // In
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-updater.php'; // Include the stock updater class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-sync-time-col.php'; // Include the stock sync time column class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-sync-status-page.php'; // Include the stock sync status page class
+require_once plugin_dir_path(__FILE__) . 'includes/class-products-page-sync.php'; // Include the products page sync class
 
 function wc_sspaa_activate()
 {
