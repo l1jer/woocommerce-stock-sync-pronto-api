@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.16
+**Stable tag:** 1.3.17
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,14 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.17
+* **FIXED:** Resolved critical logging issue where the entire log file was being overwritten on every log entry
+* Optimised logging function to append entries first, then perform cleanup only when needed
+* Implemented intelligent cleanup triggers: randomly (1 in 50 chance) or when file exceeds 5MB
+* Prevented log loss during high-frequency logging operations (e.g., during product synchronisation)
+* Improved logging performance by eliminating unnecessary file rewrites
+* Added cleanup logging to track when old entries are purged from the log file
 
 ### 1.3.16
 * **ENHANCED:** Updated "Sync All Products" button to dynamically display the total number of products with SKUs

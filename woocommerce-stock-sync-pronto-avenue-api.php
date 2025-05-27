@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.16
+Version: 1.3.17
 Author: Jerry Li
 */
 
@@ -115,9 +115,6 @@ function wc_sspaa_log($message)
 {
     $timestamp = date("Y-m-d H:i:s");
     $log_file = plugin_dir_path(__FILE__) . 'wc-sspaa-debug.log'; // Dedicated log file
-    $max_age_days = 4;
-    $max_age_seconds = $max_age_days * 86400;
-    $now = time();
     $new_log_entry = "[$timestamp] $message\n";
 
     // Ensure proper file permissions and create file if it doesn't exist
@@ -128,10 +125,23 @@ function wc_sspaa_log($message)
         }
     }
 
-    // Purge old log entries (older than 4 days) before writing
-    if (file_exists($log_file) && is_readable($log_file)) {
+    // Append the new log entry first (most important operation)
+    if (is_writable($log_file) || is_writable(dirname($log_file))) {
+        file_put_contents($log_file, $new_log_entry, FILE_APPEND | LOCK_EX);
+    }
+
+    // Only perform log cleanup occasionally to avoid constant file rewrites
+    // Check if cleanup is needed (randomly 1 in 50 chance, or if file is very large)
+    $should_cleanup = (rand(1, 50) === 1) || (file_exists($log_file) && filesize($log_file) > 5242880); // 5MB threshold
+    
+    if ($should_cleanup && file_exists($log_file) && is_readable($log_file) && is_writable($log_file)) {
+        $max_age_days = 4;
+        $max_age_seconds = $max_age_days * 86400;
+        $now = time();
+        
         $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $retained_lines = [];
+        $cleanup_needed = false;
         
         if ($lines !== false) {
             foreach ($lines as $line) {
@@ -139,22 +149,23 @@ function wc_sspaa_log($message)
                     $entry_time = strtotime($matches[1]);
                     if ($entry_time !== false && ($now - $entry_time) <= $max_age_seconds) {
                         $retained_lines[] = $line;
+                    } else {
+                        $cleanup_needed = true; // Found old entries to remove
                     }
                 } else {
                     // If the line does not match the expected format, keep it for safety
                     $retained_lines[] = $line;
                 }
             }
-            // Write back only the retained lines
-            if (is_writable($log_file)) {
+            
+            // Only rewrite the file if we actually found old entries to remove
+            if ($cleanup_needed && count($retained_lines) < count($lines)) {
                 file_put_contents($log_file, implode("\n", $retained_lines) . "\n", LOCK_EX);
+                // Log the cleanup action (but avoid infinite recursion)
+                $cleanup_message = "[$timestamp] Log cleanup completed: removed " . (count($lines) - count($retained_lines)) . " old entries\n";
+                file_put_contents($log_file, $cleanup_message, FILE_APPEND | LOCK_EX);
             }
         }
-    }
-    
-    // Append the new log entry
-    if (is_writable($log_file) || is_writable(dirname($log_file))) {
-        file_put_contents($log_file, $new_log_entry, FILE_APPEND | LOCK_EX);
     }
 }
 ?>
