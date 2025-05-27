@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.18
+**Stable tag:** 1.3.19
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,12 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.19
+* **REMOVED:** Removed the "Stock Sync Status" page and all associated functionality.
+* **REMOVED:** Removed the admin menu item for "Stock Sync Status".
+* **CLEANUP:** Ensured `wc_sspaa_sync_time` option is deleted on plugin deactivation and uninstallation.
+* **ENHANCED:** Streamlined plugin by removing legacy status page components.
 
 ### 1.3.18
 * **NEW:** Moved "Sync All Products" button from Stock Sync Status page to WooCommerce All Products page (Products > All Products)
