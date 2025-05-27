@@ -146,6 +146,25 @@ Review, understand, and analyse the existing project, then implement the followi
      - Include proper error handling and logging for each scheduled sync
      - Maintain the 3-second delay between API calls during synchronisation
      - Log the start and completion times for each scheduled sync operation
+   - [x] **1.3.21** Implement a 7-day log retention policy for the dedicated debug log file (`wc-sspaa-debug.log`). Modify the existing log cleanup functionality to automatically purge log entries older than 7 days instead of the current 4-day retention period. This should maintain system performance whilst providing sufficient debugging history for troubleshooting recent issues.
+   - [ ] **1.3.22** Implement intelligent stock synchronisation exemption for out-of-stock (OOS) products:
+     
+     **Problem Analysis:**
+     The system currently processes all products during each sync cycle, including products that consistently return empty responses from the API. This results in unnecessary API calls and processing overhead.
+     
+     **Example Log Entry:**
+     ```
+     [2025-05-27 12:13:46] [Context: admin] [Username: jerry@tasco.com.au] [Domain: skywatcheraustralia.com.au] HTTP status: 200; Raw response: {"products":[],"count":0,"pages":0}
+     [2025-05-27 12:13:46] Raw API response for SKU SW1025AZ3-1: {"products":[],"count":0,"pages":0}
+     ```
+     
+     **Requirements:**
+     - When any product SKU returns the API response `{"products":[],"count":0,"pages":0}`, automatically mark that SKU as permanently out-of-stock (OOS)
+     - Store OOS status in product meta data (e.g., `_wc_sspaa_oos_exempt`) with timestamp
+     - Exempt OOS-marked SKUs from all future synchronisation cycles (both scheduled and manual)
+     - Provide an admin interface or method to manually reset the OOS exemption status for specific products if needed
+     - Log when products are marked as OOS exempt and when they are skipped during sync cycles
+     - Consider implementing a periodic review system (e.g., monthly) to re-check previously exempted SKUs
 
 
 ### Side Project

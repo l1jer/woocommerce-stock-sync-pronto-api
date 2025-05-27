@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.20
+**Stable tag:** 1.3.21
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,9 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.21
+* **ENHANCED:** Updated log retention policy from 4 days to 7 days for the `wc-sspaa-debug.log` file.
 
 ### 1.3.20
 * **NEW:** Implemented domain-specific daily stock synchronisation schedules.
