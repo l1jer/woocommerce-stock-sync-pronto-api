@@ -470,7 +470,7 @@ class WC_SSPAA_Stock_Sync_Status_Page {
         // Get current date in Sydney timezone
         $today = new DateTime('now', $sydney_timezone);
         $today_date = $today->format('Y-m-d');
-
+        
         // Create Sydney datetime with the sync time
         $sydney_datetime = new DateTime($today_date . ' ' . $sync_time, $sydney_timezone);
         
@@ -479,10 +479,10 @@ class WC_SSPAA_Stock_Sync_Status_Page {
         if ($sydney_datetime <= $now) {
             $sydney_datetime->add(new DateInterval('P1D'));
         }
-        
-        // Convert to UTC for scheduling
-        $sydney_datetime->setTimezone($utc_timezone);
-        $utc_timestamp = $sydney_datetime->getTimestamp();
+                
+                // Convert to UTC for scheduling
+                $sydney_datetime->setTimezone($utc_timezone);
+                $utc_timestamp = $sydney_datetime->getTimestamp();
         
         wc_sspaa_log('[Reschedule] Scheduling daily sync at Sydney time: ' . $sync_time . 
             ' (UTC time: ' . $sydney_datetime->format('Y-m-d H:i:s') . ')');
@@ -558,7 +558,7 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             wc_sspaa_log('Starting immediate sync all products via AJAX');
             
             global $wpdb;
-            
+        
             // Get total count of products with SKUs
             $total_products = $wpdb->get_var(
                 "SELECT COUNT(DISTINCT p.ID) 
@@ -582,8 +582,8 @@ class WC_SSPAA_Stock_Sync_Status_Page {
             delete_transient($lock_transient_key);
             
             wc_sspaa_log('Completed immediate sync all products via AJAX');
-            
-            wp_send_json_success(array(
+        
+        wp_send_json_success(array(
                 'message' => "Successfully synced all {$total_products} products. Check the logs for details.",
                 'total_products' => $total_products
             ));

@@ -17,7 +17,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-api-handler.php'; // In
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-updater.php'; // Include the stock updater class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-sync-time-col.php'; // Include the stock sync time column class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-sync-status-page.php'; // Include the stock sync status page class
-require_once plugin_dir_path(__FILE__) . 'includes/class-products-page-sync.php'; // Include the products page sync class
+require_once plugin_dir_path(__FILE__) . 'includes/class-products-page-sync-button.php'; // Include the products page sync button class
 
 function wc_sspaa_activate()
 {
@@ -136,32 +136,32 @@ function wc_sspaa_log($message)
     $should_cleanup = (rand(1, 50) === 1) || (file_exists($log_file) && filesize($log_file) > 5242880); // 5MB threshold
     
     if ($should_cleanup && file_exists($log_file) && is_readable($log_file) && is_writable($log_file)) {
-        $max_age_days = 4;
-        $max_age_seconds = $max_age_days * 86400;
-        $now = time();
-        
+    $max_age_days = 4;
+    $max_age_seconds = $max_age_days * 86400;
+    $now = time();
+
         $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         $retained_lines = [];
         $cleanup_needed = false;
         
         if ($lines !== false) {
-            foreach ($lines as $line) {
-                if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $matches)) {
-                    $entry_time = strtotime($matches[1]);
-                    if ($entry_time !== false && ($now - $entry_time) <= $max_age_seconds) {
-                        $retained_lines[] = $line;
+        foreach ($lines as $line) {
+            if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/', $line, $matches)) {
+                $entry_time = strtotime($matches[1]);
+                if ($entry_time !== false && ($now - $entry_time) <= $max_age_seconds) {
+                    $retained_lines[] = $line;
                     } else {
                         $cleanup_needed = true; // Found old entries to remove
-                    }
-                } else {
-                    // If the line does not match the expected format, keep it for safety
-                    $retained_lines[] = $line;
                 }
+            } else {
+                // If the line does not match the expected format, keep it for safety
+                $retained_lines[] = $line;
             }
+        }
             
             // Only rewrite the file if we actually found old entries to remove
             if ($cleanup_needed && count($retained_lines) < count($lines)) {
-                file_put_contents($log_file, implode("\n", $retained_lines) . "\n", LOCK_EX);
+        file_put_contents($log_file, implode("\n", $retained_lines) . "\n", LOCK_EX);
                 // Log the cleanup action (but avoid infinite recursion)
                 $cleanup_message = "[$timestamp] Log cleanup completed: removed " . (count($lines) - count($retained_lines)) . " old entries\n";
                 file_put_contents($log_file, $cleanup_message, FILE_APPEND | LOCK_EX);

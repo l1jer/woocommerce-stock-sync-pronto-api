@@ -1,171 +1,159 @@
 jQuery(document).ready(function($) {
-    // Variables for countdown timer
     let countdownInterval;
     let syncStartTime;
     let totalProducts = 0;
-    let estimatedDuration = 0;
-    
-    // Function to format time as MM:SS
-    function formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return String(minutes).padStart(2, '0') + ':' + String(remainingSeconds).padStart(2, '0');
-    }
-    
-    // Function to update countdown timer
-    function updateCountdown() {
-        if (!syncStartTime || !estimatedDuration) {
+    let currentProduct = 0;
+
+    // Handle sync button click
+    $("#wc-sspaa-sync-all-products-page").on("click", function(e) {
+        e.preventDefault();
+        
+        const $button = $(this);
+        totalProducts = parseInt($button.data("product-count"));
+        
+        if (totalProducts === 0) {
+            showNotice("No products with SKUs found to sync.", "error");
             return;
         }
         
-        const now = Date.now();
-        const elapsed = Math.floor((now - syncStartTime) / 1000);
-        const remaining = Math.max(0, estimatedDuration - elapsed);
-        
-        // Update countdown display
-        $('#wc-sspaa-countdown-timer').text(formatTime(remaining));
-        
-        // Update progress bar
-        const progress = Math.min(100, (elapsed / estimatedDuration) * 100);
-        $('#wc-sspaa-sync-progress-fill').css('width', progress + '%');
-        
-        // Update current product estimate (rough calculation)
-        const currentProduct = Math.min(totalProducts, Math.floor(elapsed / 3)); // 3 seconds per product
-        $('#wc-sspaa-current-product').text(currentProduct);
-        
-        // Stop countdown when time is up
-        if (remaining <= 0) {
-            clearInterval(countdownInterval);
-            $('#wc-sspaa-countdown-timer').text('00:00');
-            $('#wc-sspaa-sync-progress-fill').css('width', '100%');
-        }
-    }
-    
-    // Function to start countdown timer
-    function startCountdown(estimatedSeconds, productCount) {
-        syncStartTime = Date.now();
-        estimatedDuration = estimatedSeconds;
-        totalProducts = productCount;
-        
-        // Show timer container
-        $('#wc-sspaa-sync-timer-container').show();
-        
-        // Reset progress
-        $('#wc-sspaa-sync-progress-fill').css('width', '0%');
-        $('#wc-sspaa-current-product').text('0');
-        $('#wc-sspaa-countdown-timer').text(formatTime(estimatedSeconds));
-        
-        // Start countdown interval
-        countdownInterval = setInterval(updateCountdown, 1000);
-    }
-    
-    // Function to stop countdown timer
-    function stopCountdown() {
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-            countdownInterval = null;
+        // Confirm action
+        if (!confirm("This will sync all " + totalProducts + " products. This may take a while. Continue?")) {
+            return;
         }
         
-        // Hide timer container
-        $('#wc-sspaa-sync-timer-container').hide();
-        
-        // Reset variables
-        syncStartTime = null;
-        estimatedDuration = 0;
-        totalProducts = 0;
-    }
-    
-    // Function to show notice
-    function showNotice(message, type) {
-        const $notice = $('<div class="wc-sspaa-notice ' + type + '">')
-            .html(message)
-            .appendTo('#wc-sspaa-sync-notices');
-        
-        // Auto-remove notice after 10 seconds
-        setTimeout(function() {
-            $notice.fadeOut(400, function() {
-                $(this).remove();
-            });
-        }, 10000);
-    }
-    
-    // Function to sync all products with timer
-    function syncAllProductsWithTimer() {
-        // Get current button text and product count
-        const $button = $('#wc-sspaa-sync-all-products-timer');
-        const originalButtonText = $button.text();
-        const productCount = parseInt($('#wc-sspaa-total-products').text()) || 0;
-        
-        // Calculate estimated time (3 seconds per product)
-        const estimatedSeconds = productCount * 3;
-        
-        // Clear any previous notices
-        $('#wc-sspaa-sync-notices').empty();
+        startSync();
+    });
+
+    function startSync() {
+        const $button = $("#wc-sspaa-sync-all-products-page");
+        const $spinner = $("#wc-sspaa-sync-spinner");
+        const $countdownContainer = $("#wc-sspaa-countdown-container");
         
         // Disable button and show spinner
-        $button.prop('disabled', true).text('Syncing...');
-        $('#wc-sspaa-sync-spinner').addClass('is-active');
+        $button.prop("disabled", true).text(wcSspaaProductsPage.strings.syncing);
+        $spinner.addClass("is-active");
+        $countdownContainer.show();
+        
+        // Clear any previous notices
+        $(".wc-sspaa-notice").remove();
+        
+        // Record start time
+        syncStartTime = Date.now();
+        currentProduct = 0;
         
         // Start countdown timer
-        startCountdown(estimatedSeconds, productCount);
+        startCountdownTimer();
         
         // Send AJAX request
         $.ajax({
-            url: wcSspaaProductsSync.ajaxUrl,
-            type: 'POST',
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
             data: {
-                action: 'wc_sspaa_sync_all_products_with_timer',
-                nonce: wcSspaaProductsSync.nonce
+                action: "wc_sspaa_sync_all_products_with_timer",
+                nonce: wcSspaaProductsPage.nonce
             },
             timeout: 0, // No timeout - let it run as long as needed
             success: function(response) {
                 if (response.success) {
-                    showNotice('✅ ' + response.data.message, 'success');
+                    showNotice("✅ " + response.data.message, "success");
                     
-                    // Complete the progress bar
-                    $('#wc-sspaa-sync-progress-fill').css('width', '100%');
-                    $('#wc-sspaa-current-product').text(response.data.total_products);
-                    $('#wc-sspaa-countdown-timer').text('00:00');
-                    
-                    // Hide timer after a short delay
-                    setTimeout(function() {
-                        stopCountdown();
-                    }, 3000);
-                    
+                    // Update button text with new product count if provided
+                    if (response.data.total_products) {
+                        const newButtonText = wcSspaaProductsPage.strings.syncAllProducts.replace("%d", response.data.total_products);
+                        $button.data("product-count", response.data.total_products);
+                    }
                 } else {
-                    showNotice('❌ Error: ' + response.data.message, 'error');
-                    stopCountdown();
+                    showNotice("❌ Error: " + response.data.message, "error");
                 }
             },
             error: function(jqXHR, textStatus, errorThrown) {
-                let errorMsg = 'Network error occurred: ' + textStatus;
+                let errorMsg = "Network error occurred: " + textStatus;
                 if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
                     errorMsg = jqXHR.responseJSON.data.message;
                 }
-                showNotice('❌ ' + errorMsg, 'error');
-                stopCountdown();
-                console.error('AJAX Error:', textStatus, errorThrown, jqXHR);
+                showNotice("❌ " + errorMsg, "error");
+                console.error("AJAX Error:", textStatus, errorThrown, jqXHR);
             },
             complete: function() {
-                // Re-enable button and hide spinner
-                $button.prop('disabled', false).text(originalButtonText);
-                $('#wc-sspaa-sync-spinner').removeClass('is-active');
+                // Stop countdown and reset UI
+                stopCountdownTimer();
+                
+                // Re-enable button
+                const productCount = $button.data("product-count");
+                const buttonText = wcSspaaProductsPage.strings.syncAllProducts.replace("%d", productCount);
+                $button.prop("disabled", false).text(buttonText);
+                $spinner.removeClass("is-active");
+                $countdownContainer.hide();
             }
         });
     }
-    
-    // Bind click event to sync button
-    $(document).on('click', '#wc-sspaa-sync-all-products-timer', function(e) {
-        e.preventDefault();
-        
-        // Confirm before starting sync
-        if (confirm('This will sync all products with the external API. This process may take several minutes. Do you want to continue?')) {
-            syncAllProductsWithTimer();
+
+    function startCountdownTimer() {
+        updateCountdownDisplay();
+        countdownInterval = setInterval(updateCountdownDisplay, 1000);
+    }
+
+    function stopCountdownTimer() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
         }
-    });
-    
-    // Clean up on page unload
-    $(window).on('beforeunload', function() {
-        stopCountdown();
-    });
+    }
+
+    function updateCountdownDisplay() {
+        const elapsedTime = Date.now() - syncStartTime;
+        const elapsedSeconds = Math.floor(elapsedTime / 1000);
+        
+        // Calculate estimated total time (3 seconds per product)
+        const estimatedTotalSeconds = totalProducts * 3;
+        
+        // Calculate remaining time
+        const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
+        
+        // Format time as HH:MM:SS
+        const hours = Math.floor(remainingSeconds / 3600);
+        const minutes = Math.floor((remainingSeconds % 3600) / 60);
+        const seconds = remainingSeconds % 60;
+        
+        const timeString = String(hours).padStart(2, "0") + ":" + 
+                          String(minutes).padStart(2, "0") + ":" + 
+                          String(seconds).padStart(2, "0");
+        
+        $("#wc-sspaa-countdown-display").text(timeString);
+        
+        // Update progress text
+        const progressText = wcSspaaProductsPage.strings.preparingSync;
+        $("#wc-sspaa-progress-text").text(progressText);
+    }
+
+    function showNotice(message, type) {
+        const $notice = $('<div class="wc-sspaa-notice ' + type + '">')
+            .html(message)
+            .insertAfter(".wp-header-end")
+            .delay(8000)
+            .fadeOut(400, function() { $(this).remove(); });
+    }
+
+    // Update product count periodically
+    function updateProductCount() {
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_get_product_count",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            success: function(response) {
+                if (response.success && response.data.count) {
+                    const $button = $("#wc-sspaa-sync-all-products-page");
+                    const newCount = response.data.count;
+                    const newButtonText = wcSspaaProductsPage.strings.syncAllProducts.replace("%d", newCount);
+                    $button.data("product-count", newCount).text(newButtonText);
+                }
+            }
+        });
+    }
+
+    // Update product count every 60 seconds
+    setInterval(updateProductCount, 60000);
 }); 

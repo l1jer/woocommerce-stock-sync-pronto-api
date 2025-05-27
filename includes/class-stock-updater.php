@@ -30,12 +30,12 @@ class WC_SSPAA_Stock_Updater
 
         // Fetch all products from WooCommerce that have SKUs
         $products = $wpdb->get_results(
-            "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
-            FROM {$wpdb->postmeta} pm
-            JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-            WHERE pm.meta_key='_sku' 
-            AND p.post_type IN ('product', 'product_variation')
-            AND pm.meta_value != ''
+                "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
+                FROM {$wpdb->postmeta} pm
+                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                WHERE pm.meta_key='_sku' 
+                AND p.post_type IN ('product', 'product_variation')
+                AND pm.meta_value != ''
             ORDER BY p.ID ASC"
         );
 
@@ -120,8 +120,8 @@ class WC_SSPAA_Stock_Updater
             // Apply delay after each API call to respect rate limits
             if ($this->delay > 0) {
                 $this->log("Applying {$this->delay} microsecond delay to respect API rate limit.");
-                usleep($this->delay);
-            }
+            usleep($this->delay);
+        }
         }
 
         $this->log("Sync completed. Total: {$total_products}, Processed: {$processed_count}, Successful: {$successful_syncs}, Failed: {$failed_syncs}");

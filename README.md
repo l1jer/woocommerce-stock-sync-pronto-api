@@ -20,17 +20,14 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 ### 1.3.18
 * **NEW:** Moved "Sync All Products" button from Stock Sync Status page to WooCommerce All Products page (Products > All Products)
-* **NEW:** Added live countdown timer showing estimated time remaining during synchronisation
-* **NEW:** Implemented real-time progress bar with visual feedback during sync operations
-* **NEW:** Added product counter showing current progress (e.g., "Processing product 15 of 120")
-* **NEW:** Enhanced user experience with confirmation dialog before starting sync
-* **NEW:** Added automatic progress updates every second during synchronisation
-* **NEW:** Improved visual design with modern progress indicators and styling
-* **NEW:** Maintained 3-second delay between API calls for rate limit compliance
-* **NEW:** Added proper cleanup of timers and intervals on page navigation
-* Created new `class-products-page-sync.php` for products page functionality
-* Created new `products-page-sync.js` for countdown timer and progress tracking
-* Enhanced admin interface with better visual feedback and user experience
+* **NEW:** Added live countdown timer showing estimated time remaining based on 3-second delay per product
+* **NEW:** Implemented real-time progress feedback with visual countdown display in HH:MM:SS format
+* **ENHANCED:** Button dynamically displays total number of products with SKUs to be synchronised
+* **ENHANCED:** Added confirmation dialog before starting sync operation to prevent accidental triggers
+* **ENHANCED:** Improved user experience with better placement of sync functionality where products are managed
+* **ENHANCED:** Maintains exact same sync functionality as previous implementation with identical AJAX handlers
+* **ENHANCED:** Added automatic product count updates every 60 seconds to keep button text current
+* **ENHANCED:** Enhanced visual feedback with spinner, progress container, and success/error notifications
 
 ### 1.3.17
 * **FIXED:** Resolved critical logging issue where the entire log file was being overwritten on every log entry
