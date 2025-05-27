@@ -32,15 +32,19 @@ class WC_SSPAA_Stock_Sync_Time_Col
         if ('avenue_stock_sync' === $column) {
             $last_sync = get_post_meta($post_id, '_wc_sspaa_last_sync', true);
             $sku = get_post_meta($post_id, '_sku', true);
+            $is_obsolete_exempt = get_post_meta($post_id, '_wc_sspaa_obsolete_exempt', true);
             
-            // Add sync button with the product ID as data attribute
             echo '<div class="wc-sspaa-sync-container">';
             if ($last_sync) {
                 echo '<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">' . esc_html($last_sync) . '</span>';
             } else {
                 echo '<span class="wc-sspaa-last-sync" style="color: #999; display: block; margin-bottom: 5px;">N/A</span>';
             }
-            
+
+            if ($is_obsolete_exempt) {
+                echo '<span style="color: red; display: block; margin-bottom: 5px; font-weight: bold;">Obsolete</span>';
+            }            
+
             if ($sku) {
                 echo '<button type="button" class="button wc-sspaa-sync-stock" data-product-id="' . esc_attr($post_id) . '" data-sku="' . esc_attr($sku) . '">Sync Stock</button>';
                 echo '<span class="spinner" style="float: none; margin-top: 0;"></span>';
@@ -75,13 +79,15 @@ class WC_SSPAA_Stock_Sync_Time_Col
             return;
         }
         
-        // Data for our inline script
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wc_sspaa_sync_nonce')
+            'nonce' => wp_create_nonce('wc_sspaa_sync_nonce'),
+            'strings' => array(
+                'obsolete_exempt_message' => __('Product is Obsolete. Manual sync skipped.', 'woocommerce'),
+                'marked_obsolete_message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce')
+            )
         );
         
-        // Add inline script for the single product sync button
         $inline_js = "
             jQuery(document).ready(function($) {
                 $(document).on('click', '.wc-sspaa-sync-stock', function(e) {
@@ -91,9 +97,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
                     var \$spinner = \$container.find('.spinner');
                     var \$lastSyncSpan = \$container.find('.wc-sspaa-last-sync');
                     
-                    // Remove previous notices
                     \$container.find('.notice').remove();
-
                     \$button.prop('disabled', true);
                     \$spinner.addClass('is-active');
 
@@ -108,15 +112,23 @@ class WC_SSPAA_Stock_Sync_Time_Col
                         },
                         success: function(response) {
                             if (response.success) {
-                                \$lastSyncSpan.text(response.data.last_sync).css('color', '#46b450'); // Green for success
-                                \$('<div class=\\'notice updated\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                                if (response.data.is_obsolete_exempt) {
+                                    \$lastSyncSpan.text('N/A (Obsolete)').css('color', '#999');
+                                    \$('<div class=\\'notice error\\'><p>' + wcSspaaColData.strings.obsolete_exempt_message + '</p></div>').appendTo(\$container).delay(8000).fadeOut();
+                                } else if (response.data.marked_obsolete) {
+                                    \$lastSyncSpan.text(response.data.last_sync + ' (Now Obsolete)').css('color', 'orange');
+                                    \$('<div class=\\'notice updated\\'><p>' + wcSspaaColData.strings.marked_obsolete_message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                                } else {
+                                    \$lastSyncSpan.text(response.data.last_sync).css('color', '#46b450');
+                                    \$('<div class=\\'notice updated\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                                }
                             } else {
-                                \$lastSyncSpan.css('color', '#dc3232'); // Red for error
+                                \$lastSyncSpan.css('color', '#dc3232');
                                 \$('<div class=\\'notice error\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
                             }
                         },
                         error: function(jqXHR, textStatus, errorThrown) {
-                            \$lastSyncSpan.css('color', '#dc3232'); // Red for error
+                            \$lastSyncSpan.css('color', '#dc3232');
                              \$('<div class=\\'notice error\\'><p>AJAX Error: ' + textStatus + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
                         },
                         complete: function() {
@@ -128,7 +140,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
             });
         ";
         
-        wp_register_script('wc-sspaa-col-inline-js-handle', ''); // Dummy handle
+        wp_register_script('wc-sspaa-col-inline-js-handle', '');
         wp_enqueue_script('wc-sspaa-col-inline-js-handle');
         wp_add_inline_script('wc-sspaa-col-inline-js-handle', $inline_js);
         wp_localize_script('wc-sspaa-col-inline-js-handle', 'wcSspaaColData', $script_data);
@@ -146,108 +158,123 @@ class WC_SSPAA_Stock_Sync_Time_Col
     
     public function sync_single_product()
     {
-        wc_sspaa_log('Received sync request');
+        wc_sspaa_log('Received sync request for single product');
         
-        // Verify nonce
         if (!check_ajax_referer('wc_sspaa_sync_nonce', 'nonce', false)) {
-            wc_sspaa_log('Nonce verification failed');
+            wc_sspaa_log('Nonce verification failed for single product sync');
             wp_send_json_error(array('message' => 'Security check failed'));
             return;
         }
         
         if (!current_user_can('edit_products')) {
-            wc_sspaa_log('Permission denied for user');
+            wc_sspaa_log('Permission denied for single product sync');
             wp_send_json_error(array('message' => 'Permission denied'));
             return;
         }
 
-        $lock_transient_key = 'wc_sspaa_manual_sync_active_lock';
-        $lock_timeout = 30; // Lock for 30 seconds (API call + delay + buffer)
-
-        if (get_transient($lock_transient_key)) {
-            wc_sspaa_log('Manual sync: Another sync operation is currently locked. Aborting.');
-            wp_send_json_error(array('message' => __('Another sync operation is currently in progress. Please try again in a moment.', 'woocommerce')));
-            return;
-        }
-
-        set_transient($lock_transient_key, true, $lock_timeout);
-        
         $product_id = isset($_POST['product_id']) ? absint($_POST['product_id']) : 0;
         $sku = isset($_POST['sku']) ? sanitize_text_field($_POST['sku']) : '';
         
-        wc_sspaa_log('Processing sync request - Product ID: ' . $product_id . ', SKU: ' . $sku);
+        wc_sspaa_log("Processing single sync request - Product ID: {$product_id}, SKU: {$sku}");
         
         if (!$product_id || !$sku) {
-            delete_transient($lock_transient_key); // Release lock
             wc_sspaa_log('Error: Invalid product ID or SKU for single product sync');
             wp_send_json_error(array('message' => 'Invalid product ID or SKU'));
             return;
         }
+
+        if (get_post_meta($product_id, '_wc_sspaa_obsolete_exempt', true)) {
+            wc_sspaa_log("Product ID: {$product_id} (SKU: {$sku}) is Obsolete exempt. Skipping API call for manual sync.");
+            wp_send_json_success(array(
+                'message' => __('Product is Obsolete. Sync skipped.', 'woocommerce'), 
+                'is_obsolete_exempt' => true
+            ));
+            return;
+        }
+
+        $lock_transient_key = 'wc_sspaa_manual_sync_active_lock_' . $product_id;
+        $lock_timeout = 30; 
+
+        if (get_transient($lock_transient_key)) {
+            wc_sspaa_log("Manual sync for Product ID {$product_id}: Another sync operation is currently locked. Aborting.");
+            wp_send_json_error(array('message' => __('Another sync operation for this product is in progress. Please try again in a moment.', 'woocommerce')));
+            return;
+        }
+        set_transient($lock_transient_key, true, $lock_timeout);
         
         try {
-            // Get product information
             $product_post = get_post($product_id);
             $product_type = $product_post->post_type;
             $parent_id = $product_post->post_parent;
             
-            wc_sspaa_log("Product info - ID: {$product_id}, Type: {$product_type}, Parent ID: {$parent_id}");
-            
             $api_handler = new WC_SSPAA_API_Handler();
-            wc_sspaa_log('Fetching product data from API for SKU: ' . $sku);
-            
             $response = $api_handler->get_product_data($sku);
-            // Add a 3-second delay after the API call for manual sync
-            wc_sspaa_log('Manual sync: Preparing to delay for 3 seconds to respect API rate limit.');
-            usleep(3000000); // 3 seconds delay
+            usleep(3000000);
 
-            wc_sspaa_log('API Response: ' . json_encode($response));
+            $raw_response_for_log = is_string($response) ? $response : json_encode($response);
+            $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;
+            wc_sspaa_log('Single Sync API Response for SKU ' . $sku . ': ' . $loggable_response);
             
-            if (!$response || !isset($response['products']) || empty($response['products'])) {
-                delete_transient($lock_transient_key); // Release lock
-                wc_sspaa_log('Error: No product data found for SKU: ' . $sku);
-                wp_send_json_error(array('message' => 'No product data found'));
+            if (is_array($response) && 
+                isset($response['products']) && empty($response['products']) && 
+                isset($response['count']) && $response['count'] === 0 && 
+                isset($response['pages']) && $response['pages'] === 0) {
+                
+                update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+                update_post_meta($product_id, '_stock', 0);
+                wc_update_product_stock_status($product_id, 'outofstock');
+                $current_time = current_time('mysql');
+                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+                wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt during single sync. Stock set to 0.");
+
+                if ($product_type === 'product_variation' && $parent_id > 0) {
+                    $this->update_parent_product_stock($parent_id);
+                }
+                delete_transient($lock_transient_key);
+                wp_send_json_success(array(
+                    'message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce'),
+                    'last_sync' => $current_time,
+                    'marked_obsolete' => true
+                ));
                 return;
             }
             
-            $product_data = $response['products'][0];
-            $quantity = 0;
-            
-            foreach ($product_data['inventory_quantities'] as $inventory) {
-                if ($inventory['warehouse'] === '1') {
-                    $quantity = floatval($inventory['quantity']);
-                    break;
+            if (isset($response['products']) && !empty($response['products'])) {
+                if (delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt')) {
+                    wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) Obsolete exemption removed during single sync.");
                 }
-            }
-            
-            if ($quantity < 0) {
+
+                $product_data = $response['products'][0];
                 $quantity = 0;
+                foreach ($product_data['inventory_quantities'] as $inventory) {
+                    if ($inventory['warehouse'] === '1') {
+                        $quantity = floatval($inventory['quantity']);
+                        break;
+                    }
+                }
+                if ($quantity < 0) $quantity = 0;
+                
+                update_post_meta($product_id, '_stock', $quantity);
+                wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
+                $current_time = current_time('mysql');
+                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+
+                if ($product_type === 'product_variation' && $parent_id > 0) {
+                    $this->update_parent_product_stock($parent_id);
+                }
+                delete_transient($lock_transient_key);
+                wp_send_json_success(array(
+                    'message' => 'Stock updated successfully',
+                    'last_sync' => $current_time
+                ));
+            } else {
+                delete_transient($lock_transient_key);
+                wc_sspaa_log('Error: No product data found for SKU: ' . $sku . ' in single sync.');
+                wp_send_json_error(array('message' => 'No product data found for SKU'));
             }
-            
-            wc_sspaa_log('Updating stock for product ID: ' . $product_id . ' to quantity: ' . $quantity);
-            
-            // Update stock quantity
-            update_post_meta($product_id, '_stock', $quantity);
-            wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
-            
-            $current_time = current_time('mysql');
-            update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-            
-            // If this is a variation, update the parent product stock
-            if ($product_type === 'product_variation' && $parent_id > 0) {
-                $this->update_parent_product_stock($parent_id);
-            }
-            
-            delete_transient($lock_transient_key); // Release lock
-            wc_sspaa_log('Successfully updated stock for product ID: ' . $product_id);
-            
-            wp_send_json_success(array(
-                'message' => 'Stock updated successfully',
-                'last_sync' => $current_time
-            ));
-            
         } catch (Exception $e) {
-            delete_transient($lock_transient_key); // Ensure lock is released on error
-            wc_sspaa_log('Error syncing product ID: ' . $product_id . ' - ' . $e->getMessage());
+            delete_transient($lock_transient_key);
+            wc_sspaa_log('Error syncing single product ID: ' . $product_id . ' - ' . $e->getMessage());
             wp_send_json_error(array('message' => 'Error syncing product: ' . $e->getMessage()));
         }
     }

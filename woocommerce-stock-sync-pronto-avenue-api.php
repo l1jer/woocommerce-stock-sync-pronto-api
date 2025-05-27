@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.21
+Version: 1.3.22
 Author: Jerry Li
 */
 
@@ -41,6 +41,9 @@ function wc_sspaa_init()
     add_action('wc_sspaa_daily_stock_sync', 'wc_sspaa_trigger_scheduled_sync_handler'); // Cron hook
     add_action('wp_ajax_wc_sspaa_run_scheduled_sync', 'wc_sspaa_handle_scheduled_sync'); // AJAX handler for logged-in users (cron might be either)
     add_action('wp_ajax_nopriv_wc_sspaa_run_scheduled_sync', 'wc_sspaa_handle_scheduled_sync'); // AJAX handler for non-logged-in users (cron might be either)
+
+    // Action to manually clear Obsolete exemption for a product
+    add_action('admin_action_wc_sspaa_clear_obsolete_exemption', 'wc_sspaa_handle_clear_obsolete_exemption');
 }
 add_action('plugins_loaded', 'wc_sspaa_init');
 
@@ -195,6 +198,48 @@ function wc_sspaa_handle_scheduled_sync()
     wp_die(); // this is required to terminate immediately and return a proper response
 }
 
+function wc_sspaa_handle_clear_obsolete_exemption() {
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(__('You do not have sufficient permissions to access this page.', 'woocommerce'));
+    }
+
+    $product_id = isset($_GET['product_id']) ? absint($_GET['product_id']) : 0;
+    
+    if (empty($product_id)) {
+        wp_die(__('No product ID provided.', 'woocommerce'));
+    }
+
+    check_admin_referer('wc_sspaa_clear_obsolete_exempt_' . $product_id);
+
+    $obsolete_meta_existed = delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt');
+
+    if ($obsolete_meta_existed) {
+        add_action('admin_notices', function() use ($product_id) {
+            $product = wc_get_product($product_id);
+            $product_name = $product ? $product->get_formatted_name() : 'Product ID: ' . $product_id;
+            echo '<div class="notice notice-success is-dismissible"><p>' . 
+                sprintf(__('Obsolete exemption cleared for %s. It will be included in the next sync cycle.', 'woocommerce'), esc_html($product_name)) . 
+            '</p></div>';
+        });
+        wc_sspaa_log("Admin action: Obsolete exemption cleared for product ID: {$product_id} by user ID: " . get_current_user_id());
+    } else {
+        add_action('admin_notices', function() use ($product_id) {
+            $product = wc_get_product($product_id);
+            $product_name = $product ? $product->get_formatted_name() : 'Product ID: ' . $product_id;
+            echo '<div class="notice notice-warning is-dismissible"><p>' . 
+                sprintf(__('Obsolete exemption was not found or already cleared for %s.', 'woocommerce'), esc_html($product_name)) . 
+            '</p></div>';
+        });
+        wc_sspaa_log("Admin action: Attempted to clear Obsolete exemption for product ID: {$product_id}, but no exemption was found. User ID: " . get_current_user_id());
+    }
+
+    $redirect_url = admin_url('edit.php?post_type=product');
+    if (isset($_GET['redirect_to']) && $_GET['redirect_to'] === 'product_edit') {
+        $redirect_url = admin_url('post.php?post=' . $product_id . '&action=edit');
+    }
+    wp_safe_redirect($redirect_url);
+    exit;
+}
 
 // Deactivate the plugin and clear scheduled events
 function wc_sspaa_deactivate()

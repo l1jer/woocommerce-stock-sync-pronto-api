@@ -28,24 +28,34 @@ class WC_SSPAA_Stock_Updater
     {
         global $wpdb;
 
-        // Fetch all products from WooCommerce that have SKUs
-        $products = $wpdb->get_results(
-                "SELECT p.ID, pm.meta_value AS sku, p.post_type, p.post_parent 
-                FROM {$wpdb->postmeta} pm
-                JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                WHERE pm.meta_key='_sku' 
-                AND p.post_type IN ('product', 'product_variation')
-                AND pm.meta_value != ''
-            ORDER BY p.ID ASC"
-        );
+        // Fetch all products from WooCommerce that have SKUs and are not Obsolete exempt
+        $products_query = 
+            "SELECT p.ID, pm_sku.meta_value AS sku, p.post_type, p.post_parent 
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm_sku ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
+            LEFT JOIN {$wpdb->postmeta} pm_obsolete ON p.ID = pm_obsolete.post_id AND pm_obsolete.meta_key = '_wc_sspaa_obsolete_exempt'
+            WHERE p.post_type IN ('product', 'product_variation')
+            AND pm_sku.meta_value != ''
+            AND (pm_obsolete.meta_id IS NULL OR pm_obsolete.meta_value = '' OR pm_obsolete.meta_value = 0) -- Exclude if Obsolete exempt meta exists and is not empty/zero
+            ORDER BY p.ID ASC";
+        
+        $products = $wpdb->get_results($products_query);
 
-        $total_products = count($products);
-        $this->log('Starting sequential sync for ' . $total_products . ' products with SKUs');
+        $total_to_process = count($products);
+        // Get total count of all products with SKUs for logging context, including exempt ones
+        $total_all_sku_products = $wpdb->get_var(
+            "SELECT COUNT(p.ID) 
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm_sku ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
+            WHERE p.post_type IN ('product', 'product_variation') AND pm_sku.meta_value != ''"
+        );
+        $this->log("Starting sync. Total products with SKUs: {$total_all_sku_products}. Products to process (not Obsolete exempt): {$total_to_process}");
         
         $processed_count = 0;
         $successful_syncs = 0;
         $failed_syncs = 0;
-        $processed_products = array();
+        $marked_obsolete = 0;
+        $processed_products = array(); // To handle parent/variation processing once
 
         foreach ($products as $product) {
             $sku = $product->sku;
@@ -53,29 +63,49 @@ class WC_SSPAA_Stock_Updater
             $product_type = $product->post_type;
             $parent_id = $product->post_parent;
 
-            // Skip if already processed this product
             if (in_array($product_id, $processed_products)) {
-                $this->log("Skipping already processed product ID: {$product_id}");
                 continue;
             }
-
-            // Add to processed products
             $processed_products[] = $product_id;
             $processed_count++;
 
             if (empty($sku)) {
-                $this->log("Skipping product ID: {$product_id} with empty SKU.");
+                $this->log("Skipping product ID: {$product_id} with empty SKU. (Should not happen with current query)");
                 $failed_syncs++;
                 continue;
             }
 
-            $this->log("Processing product {$processed_count}/{$total_products} - ID: {$product_id}, Type: {$product_type}, Parent: {$parent_id}, SKU: {$sku}");
+            $this->log("Processing product {$processed_count}/{$total_to_process} - ID: {$product_id}, Type: {$product_type}, SKU: {$sku}");
 
             $response = $this->api_handler->get_product_data($sku);
             $raw_response_for_log = is_string($response) ? $response : json_encode($response);
-            $this->log('Raw API response for SKU ' . $sku . ': ' . $raw_response_for_log);
+            // Be careful not to log excessively large successful responses if they occur
+            $loggable_response = (strlen($raw_response_for_log) > 1000) ? substr($raw_response_for_log, 0, 1000) . '... (truncated)' : $raw_response_for_log;
+            $this->log('API response for SKU ' . $sku . ': ' . $loggable_response);
 
-            if (isset($response['products']) && !empty($response['products'])) {
+            // Check for the specific Obsolete empty response: {"products":[],"count":0,"pages":0}
+            if (is_array($response) && 
+                isset($response['products']) && empty($response['products']) && 
+                isset($response['count']) && $response['count'] === 0 && 
+                isset($response['pages']) && $response['pages'] === 0) {
+                
+                update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+                update_post_meta($product_id, '_stock', 0);
+                wc_update_product_stock_status($product_id, 'outofstock');
+                update_post_meta($product_id, '_wc_sspaa_last_sync', current_time('mysql')); // Still update sync time
+                $this->log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt due to empty API response. Stock set to 0.");
+                $marked_obsolete++;
+
+                if ($product_type === 'product_variation' && $parent_id > 0) {
+                    $this->update_parent_product_stock($parent_id); // Update parent if a variation is marked Obsolete
+                }
+
+            } elseif (isset($response['products']) && !empty($response['products'])) {
+                // Clear Obsolete exempt flag if it exists, as we have valid data now
+                if (delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt')) {
+                    $this->log("SKU {$sku} (Product ID: {$product_id}) Obsolete exemption removed due to valid stock data from API.");
+                }
+
                 $product_data = $response['products'][0];
                 $quantity = 0;
 
@@ -91,42 +121,26 @@ class WC_SSPAA_Stock_Updater
                 }
 
                 $this->log('Updating stock for SKU: ' . $sku . ' with quantity: ' . $quantity);
-
-                // Update stock quantity
                 update_post_meta($product_id, '_stock', $quantity);
                 wc_update_product_stock_status($product_id, ($quantity > 0) ? 'instock' : 'outofstock');
+                update_post_meta($product_id, '_wc_sspaa_last_sync', current_time('mysql'));
 
-                // Save last sync time
-                $current_time = current_time('mysql');
-                $this->log('Saving last sync time: ' . $current_time . ' for product ID: ' . $product_id);
-                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-
-                // If this is a variable product, update the parent product stock status based on variations
                 if ($product_type === 'product_variation' && $parent_id > 0) {
                     $this->update_parent_product_stock($parent_id);
                 }
                 
                 $successful_syncs++;
-                $this->log("Successfully synced product {$processed_count}/{$total_products} - SKU: {$sku}");
             } else {
                 $failed_syncs++;
-                if ($response === null) {
-                    $this->log('No response or API error for SKU: ' . $sku . '. Check previous logs for API errors or JSON decode issues.');
-                } else {
-                    $this->log('No product data found in API response for SKU: ' . $sku);
-                }
+                $this->log('No product data or unexpected response for SKU: ' . $sku . '. See raw response above.');
             }
             
-            // Apply delay after each API call to respect rate limits
             if ($this->delay > 0) {
-                $this->log("Applying {$this->delay} microsecond delay to respect API rate limit.");
-            usleep($this->delay);
-        }
+                usleep($this->delay);
+            }
         }
 
-        $this->log("Sync completed. Total: {$total_products}, Processed: {$processed_count}, Successful: {$successful_syncs}, Failed: {$failed_syncs}");
-        
-        // Save completion time
+        $this->log("Sync completed. Total with SKUs: {$total_all_sku_products}, Processed (non-exempt): {$processed_count}, Successful: {$successful_syncs}, Failed/Other: {$failed_syncs}, Newly marked Obsolete: {$marked_obsolete}");
         update_option('wc_sspaa_last_sync_completion', current_time('mysql'));
     }
 

@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.21
+**Stable tag:** 1.3.22
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,17 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.22
+* **NEW:** Implemented intelligent stock synchronisation exemption for products identified as Obsolete.
+* **ENHANCED:** Products returning an empty API response (`{"products":[],"count":0,"pages":0}`) are now automatically marked with `_wc_sspaa_obsolete_exempt` meta (timestamped) and stock set to 0.
+* **ENHANCED:** Obsolete exempt products are excluded from subsequent main sync cycles, reducing unnecessary API calls.
+* **ENHANCED:** If an Obsolete exempt product later returns valid stock data from the API, the exemption flag is automatically removed.
+* **ENHANCED:** Individual product sync button in the product list now checks for Obsolete exemption; if exempt, it skips API call and notifies user.
+* **ENHANCED:** If individual product sync receives an empty API response (indicating Obsolete), it marks the product as Obsolete exempt.
+* **NEW:** Added an admin action (`wc_sspaa_clear_obsolete_exemption`) to allow manual clearing of the Obsolete exemption flag for a product via a specially crafted URL.
+* **LOGGING:** Added logs for marking products as Obsolete exempt, removing exemption, and skipping exempt products.
+* **UI:** Added a red text indicator "Obsolete" in the "Avenue Stock Sync" column for products marked as Obsolete exempt.
 
 ### 1.3.21
 * **ENHANCED:** Updated log retention policy from 4 days to 7 days for the `wc-sspaa-debug.log` file.

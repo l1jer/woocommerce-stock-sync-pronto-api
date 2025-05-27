@@ -147,7 +147,7 @@ Review, understand, and analyse the existing project, then implement the followi
      - Maintain the 3-second delay between API calls during synchronisation
      - Log the start and completion times for each scheduled sync operation
    - [x] **1.3.21** Implement a 7-day log retention policy for the dedicated debug log file (`wc-sspaa-debug.log`). Modify the existing log cleanup functionality to automatically purge log entries older than 7 days instead of the current 4-day retention period. This should maintain system performance whilst providing sufficient debugging history for troubleshooting recent issues.
-   - [ ] **1.3.22** Implement intelligent stock synchronisation exemption for out-of-stock (OOS) products:
+   - [x] **1.3.22** Implement intelligent stock synchronisation exemption for obsolete products:
      
      **Problem Analysis:**
      The system currently processes all products during each sync cycle, including products that consistently return empty responses from the API. This results in unnecessary API calls and processing overhead.
