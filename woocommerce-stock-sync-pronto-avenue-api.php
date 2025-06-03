@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.27
+Version: 1.3.28
 Author: Jerry Li
 */
 
@@ -138,20 +138,27 @@ function wc_sspaa_execute_scheduled_sync()
     $current_domain = wc_sspaa_get_current_site_domain();
     $start_time = current_time('mysql');
     
-    wc_sspaa_log("[CRON EXECUTION] Starting scheduled stock sync for domain: {$current_domain} at {$start_time}");
+    wc_sspaa_log("[CRON EXECUTION] Triggered for domain: {$current_domain} at {$start_time}. Evaluating sync lock state.");
     
-    // Check if another sync is already running
     $lock_transient_key = 'wc_sspaa_sync_all_active_lock';
-    $lock_timeout = 3 * HOUR_IN_SECONDS;
+    $lock_timeout = 3 * HOUR_IN_SECONDS; // Current lock duration
 
     if (get_transient($lock_transient_key)) {
-        wc_sspaa_log("[CRON EXECUTION] Another sync operation is currently running. Aborting scheduled sync for domain: {$current_domain}");
-        return;
+        // A lock exists and is considered active by WordPress (i.e., not expired)
+        wc_sspaa_log("[CRON EXECUTION] Active sync lock ('{$lock_transient_key}') found. Sync operation is likely already in progress or recently failed and lock is still valid. Aborting current scheduled sync for domain: {$current_domain}. Lock duration is {$lock_timeout} seconds.");
+        return; // Correctly aborts if a valid lock is present
+    } else {
+        wc_sspaa_log("[CRON EXECUTION] No active sync lock ('{$lock_transient_key}') found. Proceeding to acquire lock for domain: {$current_domain}.");
     }
     
     // Set lock to prevent concurrent syncs
-    set_transient($lock_transient_key, true, $lock_timeout);
-    wc_sspaa_log("[CRON EXECUTION] Sync lock acquired for domain: {$current_domain}");
+    $set_lock_success = set_transient($lock_transient_key, true, $lock_timeout);
+    if ($set_lock_success) {
+        wc_sspaa_log("[CRON EXECUTION] Sync lock acquired successfully for domain: {$current_domain}. Expiration: {$lock_timeout} seconds.");
+    } else {
+        wc_sspaa_log("[CRON EXECUTION ERROR] Failed to acquire sync lock for domain: {$current_domain}. Aborting. This may indicate issues with transient storage.");
+        return; // Cannot proceed if lock cannot be set
+    }
 
     try {
         // Get product count
@@ -164,14 +171,19 @@ function wc_sspaa_execute_scheduled_sync()
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
             AND pm.meta_value != ''
-            AND exempt.meta_value IS NULL"
+            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)"
         );
         
-        wc_sspaa_log("[CRON EXECUTION] Total products to sync (excluding obsolete): {$total_products}");
+        wc_sspaa_log("[CRON EXECUTION] Total products to sync (excluding obsolete exempt): {$total_products}");
         
         if ($total_products == 0) {
-            wc_sspaa_log("[CRON EXECUTION] No products found to sync for domain: {$current_domain}");
-            delete_transient($lock_transient_key);
+            wc_sspaa_log("[CRON EXECUTION] No products found to sync for domain: {$current_domain}. Releasing lock.");
+            $delete_lock_on_no_products = delete_transient($lock_transient_key);
+            if ($delete_lock_on_no_products) {
+                wc_sspaa_log("[CRON EXECUTION] Sync lock released as no products to sync for domain: {$current_domain}.");
+            } else {
+                wc_sspaa_log("[CRON EXECUTION WARNING] Attempted to release sync lock (no products) for domain: {$current_domain}, but it was not found.");
+            }
             return;
         }
         
@@ -189,26 +201,38 @@ function wc_sspaa_execute_scheduled_sync()
         update_option('wc_sspaa_last_scheduled_sync_completion', array(
             'domain' => $current_domain,
             'completed_at' => $end_time,
-            'products_synced' => $total_products
+            'products_synced' => $total_products // This might be off if update_all_products has internal skips
         ));
         
         // Clean up lock
-        delete_transient($lock_transient_key);
-        wc_sspaa_log("[CRON EXECUTION] Released sync lock for domain: {$current_domain}");
+        $delete_lock_success = delete_transient($lock_transient_key);
+        if ($delete_lock_success) {
+            wc_sspaa_log("[CRON EXECUTION] Sync lock released successfully after completion for domain: {$current_domain}");
+        } else {
+            wc_sspaa_log("[CRON EXECUTION WARNING] Attempted to release sync lock after completion for domain: {$current_domain}, but it was not found (possibly expired or cleared elsewhere).");
+        }
 
     } catch (Exception $e) {
         wc_sspaa_log("[CRON EXECUTION ERROR] Exception during sync for domain {$current_domain}: " . $e->getMessage());
         wc_sspaa_log("[CRON EXECUTION ERROR] Stack trace: " . $e->getTraceAsString());
         
-        delete_transient($lock_transient_key);
-        wc_sspaa_log("[CRON EXECUTION] Released sync lock after exception");
+        $delete_lock_exception = delete_transient($lock_transient_key);
+        if ($delete_lock_exception) {
+            wc_sspaa_log("[CRON EXECUTION] Sync lock released after exception for domain: {$current_domain}");
+        } else {
+            wc_sspaa_log("[CRON EXECUTION WARNING] Attempted to release sync lock after exception for domain: {$current_domain}, but it was not found.");
+        }
         
     } catch (Error $e) {
         wc_sspaa_log("[CRON EXECUTION FATAL] Fatal error during sync for domain {$current_domain}: " . $e->getMessage());
         wc_sspaa_log("[CRON EXECUTION FATAL] Stack trace: " . $e->getTraceAsString());
         
-        delete_transient($lock_transient_key);
-        wc_sspaa_log("[CRON EXECUTION] Released sync lock after fatal error");
+        $delete_lock_fatal = delete_transient($lock_transient_key);
+        if ($delete_lock_fatal) {
+            wc_sspaa_log("[CRON EXECUTION] Sync lock released after fatal error for domain: {$current_domain}");
+        } else {
+            wc_sspaa_log("[CRON EXECUTION WARNING] Attempted to release sync lock after fatal error for domain: {$current_domain}, but it was not found.");
+        }
     }
 }
 

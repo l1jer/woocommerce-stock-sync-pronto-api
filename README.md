@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.27
+**Stable tag:** 1.3.28
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,9 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.28
+* **ENHANCED:** Improved management and logging of the sync lock transient (`wc_sspaa_sync_all_active_lock`) within the scheduled sync process (`wc_sspaa_execute_scheduled_sync`). This includes more detailed logging for lock acquisition, state checking, and release, ensuring better transparency and confirming robust handling of the lock to prevent stuck syncs. The core mechanism relies on transient timeouts for failsafe clearing, which aligns with WordPress best practices.
 
 ### 1.3.27
 * **REMOVED:** Removed temporary workaround that skipped SKU `ZTA-MULTI` during sync, as the underlying Cloudflare timeout issue on `zerotech.com.au` has been identified as a server configuration matter.
