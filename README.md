@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.26
+**Stable tag:** 1.3.27
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,9 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.3.27
+* **REMOVED:** Removed temporary workaround that skipped SKU `ZTA-MULTI` during sync, as the underlying Cloudflare timeout issue on `zerotech.com.au` has been identified as a server configuration matter.
 
 ### 1.3.26
 * **FIXED:** Completely resolved scheduled stock synchronisation failures across all websites by eliminating the flawed AJAX/nonce-based approach.

@@ -74,15 +74,6 @@ class WC_SSPAA_Stock_Updater
                 // Main processing logic for each product
                 $sku = isset($product->sku) ? $product->sku : null;
                 $product_id = isset($product->ID) ? $product->ID : null;
-
-                // ============== TEMPORARY WORKAROUND: Skip SKU ZTA-MULTI ==============
-                if ($sku === 'ZTA-MULTI') {
-                    $this->log("TEMP WORKAROUND: Intentionally skipping Product ID: {$product_id}, SKU: {$sku} as per request.");
-                    $failed_syncs++; // Count it as a failed/skipped sync for reporting
-                    continue; // Skip to the next product
-                }
-                // =====================================================================
-
                 $product_type = isset($product->post_type) ? $product->post_type : null;
                 $parent_id = isset($product->post_parent) ? $product->post_parent : null;
 
