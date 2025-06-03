@@ -209,7 +209,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
             
             $api_handler = new WC_SSPAA_API_Handler();
             $response = $api_handler->get_product_data($sku);
-            usleep(3000000);
+            usleep(5000000);
 
             $raw_response_for_log = is_string($response) ? $response : json_encode($response);
             $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;
@@ -222,10 +222,10 @@ class WC_SSPAA_Stock_Sync_Time_Col
                 
                 update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
                 update_post_meta($product_id, '_stock', 0);
-                wc_update_product_stock_status($product_id, 'outofstock');
+                wc_update_product_stock_status($product_id, 'obsolete');
                 $current_time = current_time('mysql');
                 update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-                wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt during single sync. Stock set to 0.");
+                wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt with 'obsolete' stock status during single sync. Stock set to 0.");
 
                 if ($product_type === 'product_variation' && $parent_id > 0) {
                     $this->update_parent_product_stock($parent_id);
@@ -306,9 +306,11 @@ class WC_SSPAA_Stock_Sync_Time_Col
         
         $total_stock = 0;
         $has_stock = false;
+        $has_obsolete_only = true; // Track if parent should be obsolete
         
         foreach ($variations as $variation) {
             $variation_stock = get_post_meta($variation->ID, '_stock', true);
+            $variation_stock_status = get_post_meta($variation->ID, '_stock_status', true);
             
             if ($variation_stock === '') {
                 continue;
@@ -320,17 +322,33 @@ class WC_SSPAA_Stock_Sync_Time_Col
             if ($variation_stock > 0) {
                 $has_stock = true;
             }
+            
+            // If any variation is not obsolete, the parent shouldn't be obsolete
+            if ($variation_stock_status !== 'obsolete') {
+                $has_obsolete_only = false;
+            }
         }
         
         // Update parent product stock
         update_post_meta($parent_id, '_stock', $total_stock);
-        wc_update_product_stock_status($parent_id, $has_stock ? 'instock' : 'outofstock');
+        
+        // Determine parent stock status
+        if ($has_obsolete_only && $total_stock === 0) {
+            wc_update_product_stock_status($parent_id, 'obsolete');
+            $status_text = 'obsolete';
+        } elseif ($has_stock) {
+            wc_update_product_stock_status($parent_id, 'instock');
+            $status_text = 'instock';
+        } else {
+            wc_update_product_stock_status($parent_id, 'outofstock');
+            $status_text = 'outofstock';
+        }
         
         // Save last sync time for parent product
         $current_time = current_time('mysql');
         update_post_meta($parent_id, '_wc_sspaa_last_sync', $current_time);
         
-        wc_sspaa_log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: " . ($has_stock ? 'instock' : 'outofstock'));
+        wc_sspaa_log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: {$status_text}");
     }
 }
 

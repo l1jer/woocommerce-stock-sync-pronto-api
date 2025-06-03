@@ -25,6 +25,9 @@ class WC_SSPAA_Products_Page_Sync_Button {
         
         // Add AJAX handler to get product count
         add_action('wp_ajax_wc_sspaa_get_product_count', array($this, 'ajax_get_product_count'));
+        
+        // Add admin notices
+        add_action('admin_notices', array($this, 'show_admin_notices'));
     }
 
     /**
@@ -54,6 +57,17 @@ class WC_SSPAA_Products_Page_Sync_Button {
             <button type="button" id="wc-sspaa-sync-all-products-page" class="button button-primary" data-product-count="<?php echo esc_attr($product_count); ?>">
                 <?php echo sprintf(__('Sync All (%d) Products', 'woocommerce'), $product_count); ?>
             </button>
+            <a href="<?php echo wp_nonce_url(admin_url('admin.php?action=wc_sspaa_manual_trigger_scheduled_sync'), 'wc_sspaa_manual_trigger'); ?>" 
+               class="button button-secondary" 
+               title="Test the scheduled sync functionality manually without waiting for the cron">
+                <?php _e('Test Scheduled Sync', 'woocommerce'); ?>
+            </a>
+            <a href="<?php echo wp_nonce_url(admin_url('admin.php?action=wc_sspaa_clear_sync_lock'), 'wc_sspaa_clear_lock_nonce'); ?>"
+               class="button button-caution" 
+               title="Clear the active sync lock if a sync process appears to be stuck. Use with caution." 
+               onclick="return confirm('<?php echo esc_js(__('Are you sure you want to clear the active sync lock? Only do this if a sync appears to be stuck.', 'woocommerce')); ?>');">
+                <?php _e('Clear Active Sync Lock', 'woocommerce'); ?>
+            </a>
             <span class="spinner" id="wc-sspaa-sync-spinner"></span>
             <div id="wc-sspaa-countdown-container" style="display: none;">
                 <div id="wc-sspaa-countdown-timer">
@@ -99,7 +113,7 @@ class WC_SSPAA_Products_Page_Sync_Button {
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('wc_sspaa_products_page_nonce'),
-            'apiDelay' => 3000, // 3 seconds delay between API calls
+            'apiDelay' => 5000, // 5 seconds delay for countdown timer estimation
             'strings' => array(
                 'syncing' => __('Syncing...', 'woocommerce'),
                 'syncComplete' => __('Sync Complete!', 'woocommerce'),
@@ -119,6 +133,12 @@ class WC_SSPAA_Products_Page_Sync_Button {
                 margin-right: 10px;
             }
             #wc-sspaa-sync-all-products-page {
+                font-size: 13px;
+                padding: 6px 12px;
+                height: auto;
+                margin-right: 8px;
+            }
+            .wc-sspaa-sync-container .button-secondary {
                 font-size: 13px;
                 padding: 6px 12px;
                 height: auto;
@@ -395,7 +415,7 @@ class WC_SSPAA_Products_Page_Sync_Button {
             
             // Create API handler and stock updater
             $api_handler = new WC_SSPAA_API_Handler();
-            $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 3000000, 0, 0, 0, 0, true); // 3 second delay, debug enabled
+            $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 5000000, 0, 0, 0, 0, true); // 5 second delay, debug enabled
             
             // Perform the sync
             $stock_updater->update_all_products();
@@ -446,6 +466,24 @@ class WC_SSPAA_Products_Page_Sync_Button {
         );
         
         wp_send_json_success(array('count' => (int)$product_count));
+    }
+
+    /**
+     * Show admin notices
+     */
+    public function show_admin_notices() {
+        global $typenow;
+        
+        if ($typenow !== 'product') {
+            return;
+        }
+        
+        // Show manual trigger success message
+        if (isset($_GET['manual_sync_triggered']) && $_GET['manual_sync_triggered'] == '1') {
+            echo '<div class="notice notice-success is-dismissible">';
+            echo '<p><strong>Manual Scheduled Sync Triggered:</strong> The scheduled sync test has been initiated. Check the debug log for detailed information about the sync process.</p>';
+            echo '</div>';
+        }
     }
 }
 

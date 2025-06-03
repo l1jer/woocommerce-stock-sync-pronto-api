@@ -105,7 +105,7 @@ jQuery(document).ready(function($) {
         const elapsedSeconds = Math.floor(elapsedTime / 1000);
         
         // Calculate estimated total time (3 seconds per product)
-        const estimatedTotalSeconds = totalProducts * 3;
+        const estimatedTotalSeconds = totalProducts * 5;
         
         // Calculate remaining time
         const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);

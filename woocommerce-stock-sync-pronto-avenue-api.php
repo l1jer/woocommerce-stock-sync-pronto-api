@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.22
+Version: 1.3.26
 Author: Jerry Li
 */
 
@@ -36,19 +36,42 @@ register_activation_hook(__FILE__, 'wc_sspaa_activate');
 
 function wc_sspaa_init()
 {
-    // This init is for general plugin setup, not for direct cron processing anymore.
-    // The stock_updater instance for cron will be created in the AJAX handler.
-    add_action('wc_sspaa_daily_stock_sync', 'wc_sspaa_trigger_scheduled_sync_handler'); // Cron hook
-    add_action('wp_ajax_wc_sspaa_run_scheduled_sync', 'wc_sspaa_handle_scheduled_sync'); // AJAX handler for logged-in users (cron might be either)
-    add_action('wp_ajax_nopriv_wc_sspaa_run_scheduled_sync', 'wc_sspaa_handle_scheduled_sync'); // AJAX handler for non-logged-in users (cron might be either)
-
+    // Direct cron hook - no more AJAX for scheduled sync
+    add_action('wc_sspaa_daily_stock_sync', 'wc_sspaa_execute_scheduled_sync'); // Direct execution
+    
+    // Keep AJAX handlers for manual sync from admin interface
+    add_action('wp_ajax_wc_sspaa_run_scheduled_sync', 'wc_sspaa_handle_manual_sync'); // For manual trigger only
+    
     // Action to manually clear Obsolete exemption for a product
     add_action('admin_action_wc_sspaa_clear_obsolete_exemption', 'wc_sspaa_handle_clear_obsolete_exemption');
+    
+    // Manual trigger for testing scheduled sync
+    add_action('admin_action_wc_sspaa_manual_trigger_scheduled_sync', 'wc_sspaa_manual_trigger_scheduled_sync');
+
+    // Action to manually clear the sync lock
+    add_action('admin_action_wc_sspaa_clear_sync_lock', 'wc_sspaa_handle_clear_sync_lock');
+
+    // Register "Obsolete" stock status with WooCommerce
+    add_filter('woocommerce_product_stock_status_options', 'wc_sspaa_add_obsolete_stock_status_options');
+
+    // Ensure "Obsolete" products are treated as out of stock
+    add_filter('woocommerce_product_is_in_stock', 'wc_sspaa_product_is_in_stock_for_obsolete', 10, 2);
+
+    // Customize the display of "Obsolete" status in the admin product list stock column
+    add_filter('woocommerce_admin_stock_html', 'wc_sspaa_admin_stock_html_for_obsolete', 10, 2);
 }
 add_action('plugins_loaded', 'wc_sspaa_init');
 
 function wc_sspaa_get_current_site_domain() {
-    return strtolower(wp_unslash($_SERVER['HTTP_HOST'] ?? parse_url(get_site_url(), PHP_URL_HOST)));
+    // Enhanced domain detection for cron context
+    if (!empty($_SERVER['HTTP_HOST'])) {
+        return strtolower(wp_unslash($_SERVER['HTTP_HOST']));
+    }
+    
+    // Fallback to WordPress site URL
+    $site_url = get_site_url();
+    $parsed_url = parse_url($site_url);
+    return strtolower($parsed_url['host'] ?? 'unknown');
 }
 
 function wc_sspaa_schedule_daily_sync()
@@ -79,123 +102,170 @@ function wc_sspaa_schedule_daily_sync()
     $sydney_datetime->setTimezone($utc_timezone);
     $utc_timestamp = $sydney_datetime->getTimestamp();
     
-    // Generate a nonce for the self-trigger
-    $nonce_action = 'wc_sspaa_cron_trigger_' . $current_domain;
-    $nonce = wp_create_nonce($nonce_action);
-    // Store the nonce action as well, as wp_verify_nonce needs it.
-    set_transient('wc_sspaa_cron_nonce_val_' . $current_domain, $nonce, HOUR_IN_SECONDS); // Valid for 1 hour
-    set_transient('wc_sspaa_cron_nonce_action_' . $current_domain, $nonce_action, HOUR_IN_SECONDS);
-
+    // Store scheduling information for debugging
+    $scheduling_info = array(
+        'scheduled_utc_time' => $sydney_datetime->format('Y-m-d H:i:s'),
+        'scheduled_sydney_time' => $sync_time_sydney,
+        'scheduled_at' => current_time('mysql'),
+        'domain' => $current_domain,
+        'next_run_timestamp' => $utc_timestamp
+    );
+    update_option('wc_sspaa_last_scheduling_info', $scheduling_info);
 
     wc_sspaa_log('Scheduling daily sync trigger at Sydney time: ' . $sync_time_sydney . 
         ' (UTC time: ' . $sydney_datetime->format('Y-m-d H:i:s') . ') for domain: ' . $current_domain);
     
-    wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_daily_stock_sync');
+    $scheduled_result = wp_schedule_event($utc_timestamp, 'daily', 'wc_sspaa_daily_stock_sync');
+    
+    if ($scheduled_result === false) {
+        wc_sspaa_log("[SCHEDULING ERROR] Failed to schedule daily sync event for domain: {$current_domain}");
+    } else {
+        wc_sspaa_log("[SCHEDULING SUCCESS] Daily sync event scheduled successfully for domain: {$current_domain}");
+        
+        // Verify the event was scheduled
+        $next_scheduled = wp_next_scheduled('wc_sspaa_daily_stock_sync');
+        if ($next_scheduled) {
+            wc_sspaa_log("[SCHEDULING VERIFICATION] Next scheduled sync verified at: " . date('Y-m-d H:i:s', $next_scheduled) . " UTC");
+        } else {
+            wc_sspaa_log("[SCHEDULING ERROR] Event scheduling verification failed - no next scheduled time found");
+        }
+    }
 }
 
-// This function is triggered by the WP Cron event
-function wc_sspaa_trigger_scheduled_sync_handler()
+// Direct execution of scheduled sync - no more AJAX/nonce complexity
+function wc_sspaa_execute_scheduled_sync()
 {
     $current_domain = wc_sspaa_get_current_site_domain();
-    wc_sspaa_log("[CRON Triggered] for domain {$current_domain}: Initiating self-request to start stock synchronisation.");
-
-    $nonce_val = get_transient('wc_sspaa_cron_nonce_val_' . $current_domain);
-    $nonce_action = get_transient('wc_sspaa_cron_nonce_action_' . $current_domain);
-
-    if (!$nonce_val || !$nonce_action) {
-        wc_sspaa_log("[CRON Triggered] for domain {$current_domain}: Nonce not found or expired. Cannot trigger sync.");
-        return;
-    }
-
-    $ajax_url = admin_url('admin-ajax.php');
-    $request_args = array(
-        'method'      => 'POST',
-        'timeout'     => 0.01, // Make it non-blocking
-        'blocking'    => false, // Make it non-blocking
-        'sslverify'   => apply_filters('https_local_ssl_verify', false),
-        'body'        => array(
-            'action'    => 'wc_sspaa_run_scheduled_sync',
-            '_ajax_nonce' => $nonce_val, // Pass the nonce value
-            'nonce_action_key' => $nonce_action, // Pass the original action string for verification
-            'domain_check' => $current_domain // For logging/verification in handler
-        ),
-    );
-
-    $response = wp_remote_post($ajax_url, $request_args);
-
-    if (is_wp_error($response)) {
-        wc_sspaa_log("[CRON Triggered] for domain {$current_domain}: Failed to make self-request. Error: " . $response->get_error_message());
-    } else {
-        wc_sspaa_log("[CRON Triggered] for domain {$current_domain}: Self-request initiated successfully.");
-    }
-}
-
-// This function handles the self-request triggered by the cron job
-function wc_sspaa_handle_scheduled_sync()
-{
-    $nonce_val = $_POST['_ajax_nonce'] ?? '';
-    $nonce_action_key = $_POST['nonce_action_key'] ?? '';
-    $triggered_domain = $_POST['domain_check'] ?? 'unknown';
-
-    wc_sspaa_log("[Scheduled Sync Handler] Received trigger for domain: {$triggered_domain}. Verifying nonce action: {$nonce_action_key}");
-
-    // Verify nonce
-    // Note: We stored $nonce_action in transient, which is what wp_verify_nonce expects as its second param.
-    if (!wp_verify_nonce($nonce_val, $nonce_action_key)) {
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Nonce verification failed. Aborting. Received nonce value: {$nonce_val}, Expected action: {$nonce_action_key}");
-        wp_send_json_error('Nonce verification failed.', 403);
-        return;
-    }
+    $start_time = current_time('mysql');
     
-    // Nonce is valid, clear it to prevent reuse
-    $current_domain_for_transient = wc_sspaa_get_current_site_domain(); // Use current domain context for deleting transient
-    delete_transient('wc_sspaa_cron_nonce_val_' . $current_domain_for_transient);
-    delete_transient('wc_sspaa_cron_nonce_action_' . $current_domain_for_transient);
-
-    wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Nonce verified. Starting stock synchronisation process.");
+    wc_sspaa_log("[CRON EXECUTION] Starting scheduled stock sync for domain: {$current_domain} at {$start_time}");
     
-    // Check if another sync is already running (using the main lock key)
-    $lock_transient_key = 'wc_sspaa_sync_all_active_lock'; // Use the same lock as manual "Sync All"
-    $lock_timeout = 3 * HOUR_IN_SECONDS; // Allow up to 3 hours for a full sync
+    // Check if another sync is already running
+    $lock_transient_key = 'wc_sspaa_sync_all_active_lock';
+    $lock_timeout = 3 * HOUR_IN_SECONDS;
 
     if (get_transient($lock_transient_key)) {
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Another sync operation (manual or scheduled) is currently locked. Aborting this scheduled run.");
-        wp_send_json_error('Another sync operation is in progress.', 429);
+        wc_sspaa_log("[CRON EXECUTION] Another sync operation is currently running. Aborting scheduled sync for domain: {$current_domain}");
         return;
     }
+    
+    // Set lock to prevent concurrent syncs
     set_transient($lock_transient_key, true, $lock_timeout);
+    wc_sspaa_log("[CRON EXECUTION] Sync lock acquired for domain: {$current_domain}");
 
     try {
+        // Get product count
         global $wpdb;
         $total_products = $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) 
             FROM {$wpdb->postmeta} pm
             JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
-            AND pm.meta_value != ''"
+            AND pm.meta_value != ''
+            AND exempt.meta_value IS NULL"
         );
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Total products with SKUs to sync: {$total_products}. Using 3-second delay.");
         
+        wc_sspaa_log("[CRON EXECUTION] Total products to sync (excluding obsolete): {$total_products}");
+        
+        if ($total_products == 0) {
+            wc_sspaa_log("[CRON EXECUTION] No products found to sync for domain: {$current_domain}");
+            delete_transient($lock_transient_key);
+            return;
+        }
+        
+        // Execute stock sync directly
         $api_handler = new WC_SSPAA_API_Handler();
-        // Use 3-second delay (3,000,000 microseconds) for scheduled sync as per task 1.3.20
-        $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 3000000, 0, 0, 0, 0, true); 
+        $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 5000000, 0, 0, 0, 0, true); // 5 second delay
         
+        wc_sspaa_log("[CRON EXECUTION] Beginning product synchronisation process...");
         $stock_updater->update_all_products();
         
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Completed stock synchronisation.");
-        update_option('wc_sspaa_last_scheduled_sync_completion_time_' . $triggered_domain, current_time('mysql'));
-        wp_send_json_success('Scheduled stock synchronisation completed for ' . $triggered_domain);
+        $end_time = current_time('mysql');
+        wc_sspaa_log("[CRON EXECUTION] Completed scheduled stock sync for domain: {$current_domain}. Started: {$start_time}, Ended: {$end_time}");
+        
+        // Store completion time
+        update_option('wc_sspaa_last_scheduled_sync_completion', array(
+            'domain' => $current_domain,
+            'completed_at' => $end_time,
+            'products_synced' => $total_products
+        ));
+        
+        // Clean up lock
+        delete_transient($lock_transient_key);
+        wc_sspaa_log("[CRON EXECUTION] Released sync lock for domain: {$current_domain}");
 
     } catch (Exception $e) {
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: ERROR during stock synchronisation - " . $e->getMessage());
-        wp_send_json_error('Error during scheduled sync: ' . $e->getMessage(), 500);
-    } finally {
-        // Release lock
+        wc_sspaa_log("[CRON EXECUTION ERROR] Exception during sync for domain {$current_domain}: " . $e->getMessage());
+        wc_sspaa_log("[CRON EXECUTION ERROR] Stack trace: " . $e->getTraceAsString());
+        
         delete_transient($lock_transient_key);
-        wc_sspaa_log("[Scheduled Sync Handler] for domain {$triggered_domain}: Released sync lock.");
+        wc_sspaa_log("[CRON EXECUTION] Released sync lock after exception");
+        
+    } catch (Error $e) {
+        wc_sspaa_log("[CRON EXECUTION FATAL] Fatal error during sync for domain {$current_domain}: " . $e->getMessage());
+        wc_sspaa_log("[CRON EXECUTION FATAL] Stack trace: " . $e->getTraceAsString());
+        
+        delete_transient($lock_transient_key);
+        wc_sspaa_log("[CRON EXECUTION] Released sync lock after fatal error");
     }
-    wp_die(); // this is required to terminate immediately and return a proper response
+}
+
+// Manual trigger function for testing scheduled sync
+function wc_sspaa_manual_trigger_scheduled_sync()
+{
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(__('You do not have sufficient permissions to access this page.', 'woocommerce'));
+    }
+
+    // Security check
+    check_admin_referer('wc_sspaa_manual_trigger');
+
+    $current_domain = wc_sspaa_get_current_site_domain();
+    wc_sspaa_log("[MANUAL TRIGGER] Admin manually triggered scheduled sync test for domain: {$current_domain}");
+    
+    // Check if cron event is scheduled
+    $next_scheduled = wp_next_scheduled('wc_sspaa_daily_stock_sync');
+    if ($next_scheduled) {
+        wc_sspaa_log("[MANUAL TRIGGER] Cron event is scheduled for: " . date('Y-m-d H:i:s', $next_scheduled) . " UTC");
+    } else {
+        wc_sspaa_log("[MANUAL TRIGGER] WARNING: No cron event found scheduled - attempting to reschedule");
+        wc_sspaa_schedule_daily_sync();
+    }
+    
+    // Execute the sync directly
+    wc_sspaa_log("[MANUAL TRIGGER] Executing scheduled sync directly...");
+    wc_sspaa_execute_scheduled_sync();
+    
+    // Redirect back with success message
+    $redirect_url = admin_url('edit.php?post_type=product&manual_sync_triggered=1');
+    wp_safe_redirect($redirect_url);
+    exit;
+}
+
+// Handle manual AJAX sync requests from admin interface
+function wc_sspaa_handle_manual_sync()
+{
+    // This is only for manual triggers from admin, not for cron
+    if (!current_user_can('manage_woocommerce')) {
+        wp_send_json_error('Permission denied', 403);
+        return;
+    }
+    
+    // For manual triggers, we can verify the nonce properly
+    if (!check_ajax_referer('wc_sspaa_manual_sync_nonce', '_ajax_nonce', false)) {
+        wp_send_json_error('Security check failed', 403);
+        return;
+    }
+    
+    $current_domain = wc_sspaa_get_current_site_domain();
+    wc_sspaa_log("[MANUAL AJAX SYNC] Starting manual sync for domain: {$current_domain}");
+    
+    // Execute the same sync function
+    wc_sspaa_execute_scheduled_sync();
+    
+    wp_send_json_success('Manual sync completed for ' . $current_domain);
 }
 
 function wc_sspaa_handle_clear_obsolete_exemption() {
@@ -212,13 +282,24 @@ function wc_sspaa_handle_clear_obsolete_exemption() {
     check_admin_referer('wc_sspaa_clear_obsolete_exempt_' . $product_id);
 
     $obsolete_meta_existed = delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt');
+    $product = wc_get_product($product_id);
+
+    if ($product) {
+        // If the product was 'obsolete', set it to 'outofstock' after clearing exemption.
+        // The next sync will determine the correct status.
+        if ($product->get_stock_status() === 'obsolete') {
+            $product->set_stock_status('outofstock');
+            $product->save();
+            wc_sspaa_log("Admin action: Product ID {$product_id} stock status changed from 'obsolete' to 'outofstock' after clearing exemption.");
+        }
+    }
 
     if ($obsolete_meta_existed) {
         add_action('admin_notices', function() use ($product_id) {
             $product = wc_get_product($product_id);
             $product_name = $product ? $product->get_formatted_name() : 'Product ID: ' . $product_id;
             echo '<div class="notice notice-success is-dismissible"><p>' . 
-                sprintf(__('Obsolete exemption cleared for %s. It will be included in the next sync cycle.', 'woocommerce'), esc_html($product_name)) . 
+                sprintf(__('Obsolete exemption cleared for %s. It will be included in the next sync cycle and status set to "Out of Stock" if previously "Obsolete".', 'woocommerce'), esc_html($product_name)) . 
             '</p></div>';
         });
         wc_sspaa_log("Admin action: Obsolete exemption cleared for product ID: {$product_id} by user ID: " . get_current_user_id());
@@ -241,6 +322,65 @@ function wc_sspaa_handle_clear_obsolete_exemption() {
     exit;
 }
 
+// Function to handle clearing the sync lock
+function wc_sspaa_handle_clear_sync_lock() {
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(__('You do not have sufficient permissions to access this page.', 'woocommerce'));
+    }
+
+    // Verify nonce
+    check_admin_referer('wc_sspaa_clear_lock_nonce');
+
+    $lock_transient_key = 'wc_sspaa_sync_all_active_lock';
+    $lock_cleared = delete_transient($lock_transient_key);
+
+    if ($lock_cleared) {
+        wc_sspaa_log("Admin action: Active sync lock ('{$lock_transient_key}') was cleared by user ID: " . get_current_user_id());
+        add_action('admin_notices', function() {
+            echo '<div class="notice notice-success is-dismissible"><p>' . 
+                __('Active sync lock has been cleared. You can now start a new sync process.', 'woocommerce') . 
+            '</p></div>';
+        });
+    } else {
+        wc_sspaa_log("Admin action: Attempted to clear active sync lock ('{$lock_transient_key}') but it was not found (or already cleared). User ID: " . get_current_user_id());
+        add_action('admin_notices', function() {
+            echo '<div class="notice notice-warning is-dismissible"><p>' . 
+                __('Active sync lock was not found or already cleared.', 'woocommerce') . 
+            '</p></div>';
+        });
+    }
+
+    // Redirect back to the products page
+    wp_safe_redirect(admin_url('edit.php?post_type=product'));
+    exit;
+}
+
+// Register "Obsolete" stock status with WooCommerce
+function wc_sspaa_add_obsolete_stock_status_options($statuses) {
+    $statuses['obsolete'] = _x('Obsolete', 'Product stock status', 'woocommerce');
+    return $statuses;
+}
+
+// Ensure "Obsolete" products are treated as out of stock
+function wc_sspaa_product_is_in_stock_for_obsolete($is_in_stock, $product) {
+    if (is_object($product) && $product->get_stock_status() === 'obsolete') {
+        return false;
+    }
+    return $is_in_stock;
+}
+
+// Customize the display of "Obsolete" status in the admin product list stock column
+function wc_sspaa_admin_stock_html_for_obsolete($html, $product) {
+    if (is_object($product) && $product->get_stock_status() === 'obsolete') {
+        $html = '<mark class="outofstock">' . esc_html__('Obsolete', 'woocommerce') . '</mark>'; // Use 'outofstock' class for styling
+        if ($product->managing_stock()) {
+            $html .= wc_help_tip(__('Stock quantity', 'woocommerce'));
+            $html .= ' (' . wc_stock_amount($product->get_stock_quantity()) . ')';
+        }
+    }
+    return $html;
+}
+
 // Deactivate the plugin and clear scheduled events
 function wc_sspaa_deactivate()
 {
@@ -258,6 +398,7 @@ function wc_sspaa_deactivate()
     foreach($defined_domains as $domain) {
         delete_transient('wc_sspaa_cron_nonce_val_' . $domain);
         delete_transient('wc_sspaa_cron_nonce_action_' . $domain);
+        delete_transient('wc_sspaa_verification_token_' . $domain);
     }
     
     wc_sspaa_log('All scheduled events and cron nonces cleared successfully.');

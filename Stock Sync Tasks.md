@@ -166,6 +166,68 @@ Review, understand, and analyse the existing project, then implement the followi
      - Log when products are marked as OOS exempt and when they are skipped during sync cycles
      - Consider implementing a periodic review system (e.g., monthly) to re-check previously exempted SKUs
 
+   - [x] **1.3.23** Enhance the obsolete product handling system by implementing a custom "Obsolete" stock status:
+     
+     **Current Behaviour:**
+     Products returning empty API responses (`{"products":[],"count":0,"pages":0}`) are marked with `_wc_sspaa_obsolete_exempt` meta and have their stock quantity set to 0, but retain the default WooCommerce stock status.
+     
+     **Requirements:**
+     - Create a new custom WooCommerce stock status called "Obsolete" 
+     - When a product is identified as obsolete (returns empty API response), automatically change its stock status to "Obsolete" instead of just setting quantity to 0
+     - The "Obsolete" status should be clearly distinguishable from standard WooCommerce stock statuses (In Stock, Out of Stock, On Backorder)
+     - Ensure the custom stock status integrates properly with WooCommerce's stock management system
+     - Update the product list display to show "Obsolete" status in the stock column
+     - Maintain backward compatibility with existing obsolete exempt functionality
+     - Add appropriate logging when products are marked with "Obsolete" status
+     - Consider how this status affects product visibility and purchasing behaviour on the frontend
+   - [x] **1.3.24** Debug and fix the scheduled stock synchronisation system that is currently failing across multiple websites:
+     
+     **Issue Analysis:**
+     The scheduled synchronisation is not executing properly on any of the configured domains. Implement a manual trigger function that allows immediate testing of the scheduled sync process without waiting for the actual scheduled time. This function should validate that the cron event is properly registered and can execute the sync workflow on demand. 
+     
+     Investigation reveals two critical problems:
+     
+     **Problem 1: Nonce Expiration Issue**
+     Log entries show nonce validation failures:
+     ```
+     [2025-05-28 14:30:10] [CRON Triggered] for domain store.zerotechoptics.com: Initiating self-request to start stock synchronisation.
+     [2025-05-28 14:30:10] [CRON Triggered] for domain store.zerotechoptics.com: Nonce not found or expired. Cannot trigger sync.
+     ```
+     
+     **Problem 2: Incomplete Synchronisation Process**
+     On zerotech.com.au, the sync process begins but terminates prematurely after processing approximately 20 products with no error logs or completion messages.
+     
+     **Requirements:**
+     - Investigate and resolve the nonce generation/validation mechanism for scheduled syncs
+     - Review the transient storage and retrieval of nonce values across different domains
+     - Debug why the sync process terminates early on some domains without proper logging
+     - Implement more robust error handling and logging for scheduled sync failures
+     - Ensure proper cleanup of nonces and transients when sync operations complete or fail
+     - Test the scheduled sync functionality across all configured domains
+     - Add additional debug logging to track the complete sync lifecycle
+     - Consider implementing a fallback mechanism if nonce validation fails
+     - Verify that the domain-specific scheduling is working correctly in UTC vs Sydney time conversion
+   - [x] **1.3.25** Resolve persistent failures of the scheduled stock synchronisation action across all websites. Despite prior enhancements (refer to version 1.3.25 changelog for context on previous attempts and implemented verification mechanisms), the issue remains. Conduct a thorough investigation focusing on:
+    - The entire lifecycle of the cron event `wc_sspaa_daily_stock_sync`: correct scheduling, reliable triggering by WP-Cron, and complete execution of its callback `wc_sspaa_trigger_scheduled_sync`.
+    - The robustness and reliability of the self-request mechanism (`wp_remote_post`) initiated by `wc_sspaa_trigger_scheduled_sync`, including argument integrity (nonce, verification token, domain, action key), potential cURL/HTTP errors, and server response handling.
+    - A meticulous review of the `wc_sspaa_handle_scheduled_sync` function, specifically the multi-layered verification logic (nonce, verification token, domain check, timing fallback). Ensure this logic correctly validates legitimate cron-triggered requests and identify any conditions causing false negatives or premature termination.
+    - Confirmation that, upon successful verification, the core stock synchronisation routines (e.g., `Stock_Updater->sync_all_products()`) are invoked correctly and execute to completion without unhandled exceptions or silent failures.
+    - Enhancing diagnostic logging at all critical points in `wc_sspaa_trigger_scheduled_sync` and `wc_sspaa_handle_scheduled_sync` to capture detailed state, decision paths, and error information for effective troubleshooting.
+    - Identifying the definitive root cause(s) for the ongoing failures and implementing a robust, best-practice solution to ensure consistent and reliable automated stock synchronisation.
+  - [x] **1.3.26** See below logs on zerotech.com.au, the button Sync All Products runs smoothly on all websites except zerotech.com.au(which stopped at 23th product with no further logs), do you think what is wrong?
+    - **Note:** Enhanced logging has been added to `class-stock-updater.php`. Please deploy the updated plugin, run the sync on zerotech.com.au, and provide the `wc-sspaa-debug.log` contents around the point of failure (expected around product 23, SKU ZTA-MULTI). This will help pinpoint the exact cause of the interruption.
+    - **Update (2025-06-03):** Added a temporary workaround to `class-stock-updater.php` to specifically skip product SKU `ZTA-MULTI` on `zerotech.com.au` to allow other products to sync. Further investigation will be needed for a permanent fix for `ZTA-MULTI`. Please test this workaround.
+    - **Update (Latest):** Added more detailed logging around the `usleep()` call in `class-stock-updater.php` to pinpoint the exact stage of failure. This includes logging the next product to be processed before the pause and confirming resumption after the pause. Please deploy, run the sync, and provide new logs.
+   - [ ] **1.3.27** Remove a temporary workaround to `class-stock-updater.php` to specifically skip product SKU `ZTA-MULTI` on `zerotech.com.au` to allow other products to sync. Further investigation will be needed for a permanent fix for `ZTA-MULTI`. Please test this workaround.
+   - [ ] **1.3.28** Prompt: Review the plugin's scheduled actions system. When a scheduled stock sync event (e.g., `wc_sspaa_daily_stock_sync`) is triggered at its designated time, ensure that any related sync process transients (such as locks, flags, or progress indicators) are properly cleared or reset. This is to prevent stuck or orphaned transients from blocking future syncs or causing inconsistent sync state. Implement this using best-practice WordPress/WooCommerce approaches, with robust logging and error handling. Document any changes in the changelog and increment the plugin version accordingly.
+   - [ ] **1.3.29** Implement a feature on the WooCommerce "All Products" admin page that displays each variable product with its associated variations listed directly beneath it. For each variation:
+     - Display key information such as SKU, price, and any other relevant details, mirroring the parent product's display format.
+     - Add a "Sync Stock" button for each variation, which triggers the same stock synchronisation function as the existing button for parent products.
+     - Visually distinguish variation rows by applying a subtle yellow background colour.
+     - Ensure the UI is clear, accessible, and consistent with WooCommerce admin styling.
+     - Maintain all existing stock sync functionality and logging for both parent and variation products.
+     - Follow WordPress and WooCommerce best practices for extensibility, security, and performance.
+
 
 ### Side Project
 

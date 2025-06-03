@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.22
+**Stable tag:** 1.3.26
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -18,8 +18,63 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 ## Changelog
 
-### 1.3.22
+### 1.3.26
+* **FIXED:** Completely resolved scheduled stock synchronisation failures across all websites by eliminating the flawed AJAX/nonce-based approach.
+* **REDESIGNED:** Implemented direct cron execution for scheduled sync, removing all complexities related to nonce verification, AJAX requests, and authentication contexts.
+* **ENHANCED:** Improved domain detection for cron contexts by adding fallback to WordPress site URL when $_SERVER['HTTP_HOST'] is unavailable.
+* **SIMPLIFIED:** Removed all nonce generation, storage, and verification logic for scheduled syncs as it was fundamentally incompatible with WordPress cron execution context.
+* **ENHANCED:** Manual trigger now directly executes the sync function instead of attempting to simulate cron behaviour.
+* **ENHANCED:** Consolidated sync execution logic into a single function (wc_sspaa_execute_scheduled_sync) used by both cron and manual triggers.
+* **IMPROVED:** Better error handling and logging with clear CRON EXECUTION tags for easier debugging of scheduled sync issues.
+* **CLEANUP:** Removed obsolete transient storage for nonces and verification tokens, simplifying the codebase significantly.
+* **RELIABILITY:** Scheduled sync now executes reliably in true cron context without dependency on user sessions or authentication states.
+
+### 1.3.25
+* **FIXED:** Resolved nonce verification failures in scheduled sync system by implementing dual verification approach (nonce + verification token).
+* **ENHANCED:** Added verification token fallback mechanism when WordPress nonce verification fails due to context changes.
+* **ENHANCED:** Improved debugging for nonce verification issues with detailed logging of stored vs received values.
+* **ENHANCED:** Enhanced manual trigger function to use both nonce and verification token for consistency.
+* **ENHANCED:** Updated deactivation cleanup to remove verification tokens alongside nonces.
+* **ENHANCED:** Added automatic verification token regeneration when missing during cron execution.
+* **ENHANCED:** Implemented timing-based verification fallback that allows sync within 10 minutes of scheduled time.
+* **ENHANCED:** Added manual test override mechanism for testing purposes when all verification methods fail.
+* **ENHANCED:** Improved fallback nonce and verification token generation with enhanced logging.
+* **LOGGING:** Added comprehensive logging for verification token generation, storage, and validation processes.
+
+### 1.3.24
+* **FIXED:** Resolved scheduled stock synchronisation system failures across multiple websites by implementing comprehensive debugging and error handling improvements.
+* **ENHANCED:** Extended nonce validity from 1 hour to 12 hours to account for timezone differences and scheduling delays, preventing nonce expiration issues.
+* **NEW:** Added manual trigger function accessible via "Test Scheduled Sync" button on Products page for immediate testing of scheduled sync functionality without waiting for cron.
+* **ENHANCED:** Implemented fallback nonce regeneration mechanism when nonces are not found or expired during cron execution.
+* **ENHANCED:** Added comprehensive error handling and logging for scheduled sync failures with detailed stack traces for exceptions and fatal errors.
+* **ENHANCED:** Improved sync process monitoring with enhanced logging at each stage of the synchronisation lifecycle.
+* **ENHANCED:** Added verification of cron event scheduling with automatic rescheduling if events are missing.
+* **ENHANCED:** Enhanced AJAX response handling with detailed response codes and body logging for better debugging.
+* **ENHANCED:** Improved sync lock management with proper cleanup in all error scenarios to prevent stuck processes.
+* **ENHANCED:** Added scheduling debug information storage for troubleshooting timing and nonce issues.
+* **ENHANCED:** Updated SQL queries in scheduled sync to exclude obsolete exempt products for better performance.
+* **ENHANCED:** Added admin notices to provide feedback when manual scheduled sync tests are triggered.
+
+### 1.3.23
 * **NEW:** Implemented intelligent stock synchronisation exemption for products identified as Obsolete.
+* **ENHANCED:** Products returning an empty API response (`{"products":[],"count":0,"pages":0}`) are now automatically marked with `_wc_sspaa_obsolete_exempt` meta (timestamped) and stock set to 0.
+* **ENHANCED:** Obsolete exempt products are excluded from subsequent main sync cycles, reducing unnecessary API calls.
+* **ENHANCED:** If an Obsolete exempt product later returns valid stock data from the API, the exemption flag is automatically removed.
+* **ENHANCED:** Individual product sync button in the product list now checks for Obsolete exemption; if exempt, it skips API call and notifies user.
+* **ENHANCED:** If individual product sync receives an empty API response (indicating Obsolete), it marks the product as Obsolete exempt.
+* **NEW:** Added an admin action (`wc_sspaa_clear_obsolete_exemption`) to allow manual clearing of the Obsolete exemption flag for a product via a specially crafted URL.
+* **LOGGING:** Added logs for marking products as Obsolete exempt, removing exemption, and skipping exempt products.
+* **UI:** Added a red text indicator "Obsolete" in the "Avenue Stock Sync" column for products marked as Obsolete exempt.
+* **NEW:** Implemented custom "Obsolete" stock status for WooCommerce products identified as obsolete through empty API responses.
+* **ENHANCED:** When products return empty API responses, they are now automatically assigned the "Obsolete" stock status instead of just "Out of Stock".
+* **ENHANCED:** Custom "Obsolete" status is properly integrated with WooCommerce's stock management system and treated as out of stock for frontend behaviour.
+* **ENHANCED:** Admin product list now displays "Obsolete" status distinctly in the stock column with appropriate styling.
+* **ENHANCED:** Parent variable products are automatically set to "Obsolete" status when all variations are obsolete.
+* **ENHANCED:** Manual obsolete exemption clearing now resets "Obsolete" status to "Out of Stock" for proper reprocessing in next sync cycle.
+* **LOGGING:** Enhanced logging to include stock status changes when products are marked as or removed from obsolete status.
+
+### 1.3.22
+* **NEW:** Implemented intelligent stock synchronisation exemption for obsolete products.
 * **ENHANCED:** Products returning an empty API response (`{"products":[],"count":0,"pages":0}`) are now automatically marked with `_wc_sspaa_obsolete_exempt` meta (timestamped) and stock set to 0.
 * **ENHANCED:** Obsolete exempt products are excluded from subsequent main sync cycles, reducing unnecessary API calls.
 * **ENHANCED:** If an Obsolete exempt product later returns valid stock data from the API, the exemption flag is automatically removed.
@@ -36,7 +91,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * **NEW:** Implemented domain-specific daily stock synchronisation schedules.
 * **NEW:** Scheduled sync now triggers an AJAX-like non-blocking background process for actual synchronisation.
 * **ENHANCED:** Sync times are now configurable per domain (store.zerotechoptics.com: 00:25, skywatcheraustralia.com.au: 00:55, zerotech.com.au: 01:25, zerotechoutdoors.com.au: 01:55, nitecoreaustralia.com.au: 02:25 Sydney time), with a default for unlisted domains (03:00 Sydney time).
-* **ENHANCED:** Scheduled synchronisation uses a 3-second delay between API calls, aligning with manual sync AJAX method.
+* **ENHANCED:** Scheduled synchronisation uses a 5-second delay between API calls, aligning with manual sync AJAX method.
 * **ENHANCED:** Added nonce verification for the cron-triggered AJAX call for improved security.
 * **ENHANCED:** Robust logging for scheduled trigger, AJAX handling, and sync process for each domain.
 * **FIXED:** Uses a shared lock transient (`wc_sspaa_sync_all_active_lock`) to prevent overlap between scheduled syncs and the manual "Sync All Products" button.
@@ -50,7 +105,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 ### 1.3.18
 * **NEW:** Moved "Sync All Products" button from Stock Sync Status page to WooCommerce All Products page (Products > All Products)
-* **NEW:** Added live countdown timer showing estimated time remaining based on 3-second delay per product
+* **NEW:** Added live countdown timer showing estimated time remaining based on 5-second delay per product
 * **NEW:** Implemented real-time progress feedback with visual countdown display in HH:MM:SS format
 * **ENHANCED:** Button dynamically displays total number of products with SKUs to be synchronised
 * **ENHANCED:** Added confirmation dialog before starting sync operation to prevent accidental triggers
@@ -88,7 +143,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Enhanced logging with proper file permissions and error handling for better debugging
 * AJAX-based manual sync with real-time progress feedback and error handling
 * Improved user experience with visual progress indicators and success/error notifications
-* Maintains 3-second delay between API calls for rate limit compliance during manual sync
+* Maintains 5-second delay between API calls for rate limit compliance during manual sync
 * Added locking mechanism to prevent multiple concurrent sync operations
 
 ### 1.3.12
@@ -104,7 +159,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * Updated Stock Sync Status page to show sync method and remove batch-related information
 
 ### 1.3.10
-* Adjusted API call delay to 3 seconds (3,000,000 microseconds) for both scheduled cron sync and manual "Sync Product" button actions to further mitigate rate limiting issues. This provides a more conservative approach to API interaction.
+* Adjusted API call delay to 5 seconds (5,000,000 microseconds) for both scheduled cron sync and manual "Sync Product" button actions to further mitigate rate limiting issues. This provides a more conservative approach to API interaction.
 
 ### 1.3.9
 * Resolved API rate limiting (HTTP 429) errors during stock synchronisation by ensuring a 2-second delay is strictly enforced after every API call attempt within batch processing, regardless of the API call's success or failure. This prevents cascading errors when the API's limit of "1 request per 2 seconds" is hit. Added more detailed logging around API calls and delays.
