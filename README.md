@@ -5,18 +5,41 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.3.28
+**Stable tag:** 1.4.0
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
-Synchronize your WooCommerce product stock levels with an external API seamlessly and efficiently.
+Synchronize your WooCommerce product stock levels and GTINs with an external API seamlessly and efficiently.
 
 ## Description
 
-WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels in sync with an external API effortlessly. 
+WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce store's product stock levels and GTINs in sync with an external API effortlessly. The plugin now includes comprehensive GTIN synchronisation capabilities, automatically populating missing GTINs from the API's APN field. 
 
 
 ## Changelog
+
+### 1.4.0
+* **NEW:** Added comprehensive GTIN synchronisation functionality
+* **NEW:** Created `WC_SSPAA_GTIN_Updater` class to handle missing GTIN population from API APN field
+* **NEW:** Added GTIN sync buttons to Products admin page: "Sync Missing GTINs" and "GTIN Stats"
+* **NEW:** Integrated GTIN sync capability into existing stock updater (optional parameter)
+* **NEW:** Added AJAX handlers for GTIN sync operations with proper security checks
+* **NEW:** Added GTIN statistics functionality showing completion rates and missing GTINs count
+* **NEW:** Added manual GTIN sync action with admin notices and error handling
+* **NEW:** Enhanced JavaScript interface with GTIN sync progress indicators and notifications
+* **ENHANCED:** Products now automatically populate missing GTINs during regular stock sync when enabled
+* **ENHANCED:** Added comprehensive logging for GTIN sync operations with dedicated log prefix
+* **ENHANCED:** Added proper error handling and retry mechanisms for GTIN sync processes
+* **ENHANCED:** Added meta field `_wc_sspaa_gtin_last_sync` to track when GTINs were last updated
+* **ENHANCED:** Updated admin interface with improved styling and user experience for GTIN operations
+
+### 1.3.29
+* **NEW:** Added SKU exclusion functionality to skip specific products from sync process
+* Defined `WC_SSPAA_EXCLUDED_SKUS` constant in main plugin file for easy SKU management
+* Updated all product count queries to exclude specified SKUs (91523, 91530, 91531, 11074-XLT)
+* Enhanced manual sync to prevent excluded SKUs from being processed individually
+* Added comprehensive logging to show which SKUs are excluded from sync operations
+* Improved sync efficiency by filtering out unwanted products at database query level
 
 ### 1.3.28
 * **ENHANCED:** Improved management and logging of the sync lock transient (`wc_sspaa_sync_all_active_lock`) within the scheduled sync process (`wc_sspaa_execute_scheduled_sync`). This includes more detailed logging for lock acquisition, state checking, and release, ensuring better transparency and confirming robust handling of the lock to prevent stuck syncs. The core mechanism relies on transient timeouts for failsafe clearing, which aligns with WordPress best practices.

@@ -7,6 +7,8 @@ assets/js/.DS_Store
 includes/.DS_Store
 includes/config.php
 tasks.md
+tsa-micro-server/.DS_Store
+tsa-micro-server/.env
 # Ignore log files
 *.log
 # Ignore temporary files

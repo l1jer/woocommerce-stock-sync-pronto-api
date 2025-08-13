@@ -192,6 +192,16 @@ class WC_SSPAA_Stock_Sync_Time_Col
             return;
         }
 
+        // Check if SKU is in excluded list
+        if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS) && in_array($sku, WC_SSPAA_EXCLUDED_SKUS)) {
+            wc_sspaa_log("Product ID: {$product_id} (SKU: {$sku}) is in excluded SKUs list. Skipping manual sync.");
+            wp_send_json_success(array(
+                'message' => __('Product SKU is excluded from sync process.', 'woocommerce'), 
+                'is_excluded_sku' => true
+            ));
+            return;
+        }
+
         $lock_transient_key = 'wc_sspaa_manual_sync_active_lock_' . $product_id;
         $lock_timeout = 30; 
 

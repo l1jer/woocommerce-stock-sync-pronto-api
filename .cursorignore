@@ -3,3 +3,5 @@ assets/.DS_Store
 assets/css/.DS_Store
 assets/js/.DS_Store
 includes/.DS_Store
+tsa-micro-server/.DS_Store
+tsa-micro-server/.env

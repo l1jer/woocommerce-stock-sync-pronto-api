@@ -26,6 +26,12 @@ class WC_SSPAA_Products_Page_Sync_Button {
         // Add AJAX handler to get product count
         add_action('wp_ajax_wc_sspaa_get_product_count', array($this, 'ajax_get_product_count'));
         
+        // Add AJAX handler for GTIN sync
+        add_action('wp_ajax_wc_sspaa_sync_missing_gtins', array($this, 'ajax_sync_missing_gtins'));
+        
+        // Add AJAX handler to get GTIN statistics
+        add_action('wp_ajax_wc_sspaa_get_gtin_stats', array($this, 'ajax_get_gtin_stats'));
+        
         // Add admin notices
         add_action('admin_notices', array($this, 'show_admin_notices'));
     }
@@ -43,13 +49,25 @@ class WC_SSPAA_Products_Page_Sync_Button {
         
         // Get product count for button text
         global $wpdb;
+        
+        // Build exclusion clause for SKUs
+        $excluded_skus_clause = '';
+        if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS)) {
+            $excluded_skus = array_map(array($wpdb, 'prepare'), array_fill(0, count(WC_SSPAA_EXCLUDED_SKUS), '%s'), WC_SSPAA_EXCLUDED_SKUS);
+            $excluded_skus_list = implode(',', $excluded_skus);
+            $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
+        }
+        
         $product_count = $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) 
             FROM {$wpdb->postmeta} pm
             JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
-            AND pm.meta_value != ''"
+            AND pm.meta_value != ''
+            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
+            {$excluded_skus_clause}"
         );
         
         ?>
@@ -68,7 +86,14 @@ class WC_SSPAA_Products_Page_Sync_Button {
                onclick="return confirm('<?php echo esc_js(__('Are you sure you want to clear the active sync lock? Only do this if a sync appears to be stuck.', 'woocommerce')); ?>');">
                 <?php _e('Clear Active Sync Lock', 'woocommerce'); ?>
             </a>
+            <button type="button" id="wc-sspaa-sync-missing-gtins" class="button button-secondary" title="Sync missing GTINs from API APN field">
+                <?php _e('Sync Missing GTINs', 'woocommerce'); ?>
+            </button>
+            <button type="button" id="wc-sspaa-show-gtin-stats" class="button button-secondary" title="Show GTIN statistics">
+                <?php _e('GTIN Stats', 'woocommerce'); ?>
+            </button>
             <span class="spinner" id="wc-sspaa-sync-spinner"></span>
+            <span class="spinner" id="wc-sspaa-gtin-spinner"></span>
             <div id="wc-sspaa-countdown-container" style="display: none;">
                 <div id="wc-sspaa-countdown-timer">
                     <strong><?php _e('Estimated time remaining:', 'woocommerce'); ?></strong>
@@ -148,7 +173,8 @@ class WC_SSPAA_Products_Page_Sync_Button {
                 opacity: 0.6;
                 cursor: not-allowed;
             }
-            #wc-sspaa-sync-spinner.is-active {
+            #wc-sspaa-sync-spinner.is-active,
+            #wc-sspaa-gtin-spinner.is-active {
                 visibility: visible;
                 display: inline-block;
                 margin-left: 8px;
@@ -190,6 +216,22 @@ class WC_SSPAA_Products_Page_Sync_Button {
                 border-left-color: #dc3232;
                 background-color: #fbeaea;
             }
+            .wc-sspaa-notice.info {
+                border-left-color: #0073aa;
+                background-color: #f0f6fc;
+            }
+            #wc-sspaa-sync-missing-gtins,
+            #wc-sspaa-show-gtin-stats {
+                font-size: 13px;
+                padding: 6px 12px;
+                height: auto;
+                margin-right: 8px;
+            }
+            #wc-sspaa-sync-missing-gtins:disabled,
+            #wc-sspaa-show-gtin-stats:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
         ');
     }
 
@@ -221,6 +263,55 @@ class WC_SSPAA_Products_Page_Sync_Button {
         }
         
         startSync();
+    });
+
+    // Handle GTIN sync button click
+    $("#wc-sspaa-sync-missing-gtins").on("click", function(e) {
+        e.preventDefault();
+        
+        // First get GTIN statistics
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_get_gtin_stats",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const stats = response.data;
+                    const missingCount = stats.missing_gtin;
+                    
+                    if (missingCount === 0) {
+                        showNotice("✅ All products already have GTINs. No sync needed.", "success");
+                        return;
+                    }
+                    
+                    // Confirm action with statistics
+                    const confirmMsg = "This will sync GTINs for " + missingCount + " products that are missing GTINs.\\n" +
+                                     "Current GTIN status: " + stats.total_with_gtin + " of " + stats.total_with_sku + 
+                                     " products have GTINs (" + stats.percentage_with_gtin + "%).\\n\\n" +
+                                     "This may take a while. Continue?";
+                    
+                    if (!confirm(confirmMsg)) {
+                        return;
+                    }
+                    
+                    startGtinSync();
+                } else {
+                    showNotice("❌ Error getting GTIN statistics: " + response.data.message, "error");
+                }
+            },
+            error: function() {
+                showNotice("❌ Error communicating with server", "error");
+            }
+        });
+    });
+
+    // Handle GTIN stats button click
+    $("#wc-sspaa-show-gtin-stats").on("click", function(e) {
+        e.preventDefault();
+        showGtinStats();
     });
 
     function startSync() {
@@ -325,11 +416,81 @@ class WC_SSPAA_Products_Page_Sync_Button {
         $("#wc-sspaa-progress-text").text(progressText);
     }
 
+    function startGtinSync() {
+        const $button = $("#wc-sspaa-sync-missing-gtins");
+        const $spinner = $("#wc-sspaa-gtin-spinner");
+        
+        // Disable button and show spinner
+        $button.prop("disabled", true).text("Syncing GTINs...");
+        $spinner.addClass("is-active");
+        
+        // Clear any previous notices
+        $(".wc-sspaa-notice").remove();
+        
+        // Send AJAX request
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_sync_missing_gtins",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            timeout: 0, // No timeout - let it run as long as needed
+            success: function(response) {
+                if (response.success) {
+                    showNotice("✅ " + response.data.message, "success");
+                } else {
+                    showNotice("❌ Error: " + response.data.message, "error");
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                let errorMsg = "Network error occurred: " + textStatus;
+                if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+                    errorMsg = jqXHR.responseJSON.data.message;
+                }
+                showNotice("❌ " + errorMsg, "error");
+                console.error("GTIN Sync AJAX Error:", textStatus, errorThrown, jqXHR);
+            },
+            complete: function() {
+                // Re-enable button
+                $button.prop("disabled", false).text("Sync Missing GTINs");
+                $spinner.removeClass("is-active");
+            }
+        });
+    }
+
+    function showGtinStats() {
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_get_gtin_stats",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const stats = response.data;
+                    const message = "📊 <strong>GTIN Statistics:</strong><br>" +
+                                  "• Total products with SKUs: " + stats.total_with_sku + "<br>" +
+                                  "• Products with GTINs: " + stats.total_with_gtin + "<br>" +
+                                  "• Missing GTINs: " + stats.missing_gtin + "<br>" +
+                                  "• Completion rate: " + stats.percentage_with_gtin + "%";
+                    showNotice(message, "info");
+                } else {
+                    showNotice("❌ Error getting GTIN statistics: " + response.data.message, "error");
+                }
+            },
+            error: function() {
+                showNotice("❌ Error communicating with server", "error");
+            }
+        });
+    }
+
     function showNotice(message, type) {
         const $notice = $("<div class=\"wc-sspaa-notice " + type + "\">")
             .html(message)
             .insertAfter(".wp-header-end")
-            .delay(8000)
+            .delay(10000)
             .fadeOut(400, function() { $(this).remove(); });
     }
 
@@ -401,14 +562,25 @@ class WC_SSPAA_Products_Page_Sync_Button {
             
             global $wpdb;
         
-            // Get total count of products with SKUs
+            // Build exclusion clause for SKUs
+            $excluded_skus_clause = '';
+            if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS)) {
+                $excluded_skus = array_map(array($wpdb, 'prepare'), array_fill(0, count(WC_SSPAA_EXCLUDED_SKUS), '%s'), WC_SSPAA_EXCLUDED_SKUS);
+                $excluded_skus_list = implode(',', $excluded_skus);
+                $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
+            }
+
+            // Get total count of products with SKUs (excluding obsolete exempt and excluded SKUs)
             $total_products = $wpdb->get_var(
                 "SELECT COUNT(DISTINCT p.ID) 
                 FROM {$wpdb->postmeta} pm
                 JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+                LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
                 WHERE pm.meta_key = '_sku' 
                 AND p.post_type IN ('product', 'product_variation')
-                AND pm.meta_value != ''"
+                AND pm.meta_value != ''
+                AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
+                {$excluded_skus_clause}"
             );
             
             wc_sspaa_log("Products page AJAX sync: Total products with SKUs to sync: {$total_products}");
@@ -456,16 +628,112 @@ class WC_SSPAA_Products_Page_Sync_Button {
         }
         
         global $wpdb;
+        
+        // Build exclusion clause for SKUs
+        $excluded_skus_clause = '';
+        if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS)) {
+            $excluded_skus = array_map(array($wpdb, 'prepare'), array_fill(0, count(WC_SSPAA_EXCLUDED_SKUS), '%s'), WC_SSPAA_EXCLUDED_SKUS);
+            $excluded_skus_list = implode(',', $excluded_skus);
+            $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
+        }
+        
         $product_count = $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) 
             FROM {$wpdb->postmeta} pm
             JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+            LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
-            AND pm.meta_value != ''"
+            AND pm.meta_value != ''
+            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
+            {$excluded_skus_clause}"
         );
         
         wp_send_json_success(array('count' => (int)$product_count));
+    }
+
+    /**
+     * AJAX handler to sync missing GTINs
+     */
+    public function ajax_sync_missing_gtins() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(array('message' => 'Permission denied'));
+            return;
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('wc_sspaa_products_page_nonce', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+        
+        try {
+            wc_sspaa_log('Starting GTIN sync via AJAX from Products page');
+            
+            // Create API handler and GTIN updater
+            $api_handler = new WC_SSPAA_API_Handler();
+            $gtin_updater = new WC_SSPAA_GTIN_Updater($api_handler, true);
+            
+            // Perform the GTIN sync
+            $gtin_updater->update_missing_gtins();
+            
+            // Get completion statistics
+            $completion_data = get_option('wc_sspaa_last_gtin_sync_completion', array());
+            
+            wc_sspaa_log('Completed GTIN sync via AJAX from Products page');
+            
+            $message = 'GTIN sync completed successfully.';
+            if (!empty($completion_data)) {
+                $message = sprintf(
+                    'GTIN sync completed. Processed: %d, Successful updates: %d, Failed: %d, Skipped (no APN): %d',
+                    $completion_data['processed'] ?? 0,
+                    $completion_data['successful'] ?? 0,
+                    $completion_data['failed'] ?? 0,
+                    $completion_data['skipped_no_apn'] ?? 0
+                );
+            }
+        
+            wp_send_json_success(array(
+                'message' => $message,
+                'completion_data' => $completion_data
+            ));
+            
+        } catch (Exception $e) {
+            wc_sspaa_log('Error in GTIN sync via AJAX: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Error syncing GTINs: ' . $e->getMessage()));
+        }
+    }
+
+    /**
+     * AJAX handler to get GTIN statistics
+     */
+    public function ajax_get_gtin_stats() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(array('message' => 'Permission denied'));
+            return;
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('wc_sspaa_products_page_nonce', 'nonce', false)) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+        
+        try {
+            // Create API handler and GTIN updater
+            $api_handler = new WC_SSPAA_API_Handler();
+            $gtin_updater = new WC_SSPAA_GTIN_Updater($api_handler, true);
+            
+            // Get GTIN statistics
+            $stats = $gtin_updater->get_gtin_statistics();
+            
+            wp_send_json_success($stats);
+            
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => 'Error retrieving GTIN statistics: ' . $e->getMessage()));
+        }
     }
 
     /**

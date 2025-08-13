@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
-Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing.
-Version: 1.3.28
+Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field.
+Version: 1.4.0
 Author: Jerry Li
 */
 
@@ -15,6 +15,7 @@ if (!defined('ABSPATH')) {
 require_once plugin_dir_path(__FILE__) . 'includes/config.php'; // Include the config file for credentials
 require_once plugin_dir_path(__FILE__) . 'includes/class-api-handler.php'; // Include the API handler class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-updater.php'; // Include the stock updater class
+require_once plugin_dir_path(__FILE__) . 'includes/class-gtin-updater.php'; // Include the GTIN updater class
 require_once plugin_dir_path(__FILE__) . 'includes/class-stock-sync-time-col.php'; // Include the stock sync time column class
 require_once plugin_dir_path(__FILE__) . 'includes/class-products-page-sync-button.php'; // Include the products page sync button class
 
@@ -27,6 +28,14 @@ define('WC_SSPAA_DOMAIN_SYNC_SCHEDULE', array(
     'nitecoreaustralia.com.au' => '02:25:00'
 ));
 define('WC_SSPAA_DEFAULT_SYNC_TIME', '03:00:00'); // Default for other domains
+
+// Define SKUs to exclude from sync process - add or remove SKUs as needed
+define('WC_SSPAA_EXCLUDED_SKUS', array(
+    '91523',
+    '91530', 
+    '91531',
+    '11074-XLT'
+));
 
 function wc_sspaa_activate()
 {
@@ -50,6 +59,9 @@ function wc_sspaa_init()
 
     // Action to manually clear the sync lock
     add_action('admin_action_wc_sspaa_clear_sync_lock', 'wc_sspaa_handle_clear_sync_lock');
+
+    // Action to manually trigger GTIN sync
+    add_action('admin_action_wc_sspaa_manual_gtin_sync', 'wc_sspaa_handle_manual_gtin_sync');
 
     // Register "Obsolete" stock status with WooCommerce
     add_filter('woocommerce_product_stock_status_options', 'wc_sspaa_add_obsolete_stock_status_options');
@@ -163,6 +175,15 @@ function wc_sspaa_execute_scheduled_sync()
     try {
         // Get product count
         global $wpdb;
+        
+        // Build exclusion clause for SKUs
+        $excluded_skus_clause = '';
+        if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS)) {
+            $excluded_skus = array_map(array($wpdb, 'prepare'), array_fill(0, count(WC_SSPAA_EXCLUDED_SKUS), '%s'), WC_SSPAA_EXCLUDED_SKUS);
+            $excluded_skus_list = implode(',', $excluded_skus);
+            $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
+        }
+        
         $total_products = $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) 
             FROM {$wpdb->postmeta} pm
@@ -171,7 +192,8 @@ function wc_sspaa_execute_scheduled_sync()
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
             AND pm.meta_value != ''
-            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)"
+            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
+            {$excluded_skus_clause}"
         );
         
         wc_sspaa_log("[CRON EXECUTION] Total products to sync (excluding obsolete exempt): {$total_products}");
@@ -342,6 +364,57 @@ function wc_sspaa_handle_clear_obsolete_exemption() {
     if (isset($_GET['redirect_to']) && $_GET['redirect_to'] === 'product_edit') {
         $redirect_url = admin_url('post.php?post=' . $product_id . '&action=edit');
     }
+    wp_safe_redirect($redirect_url);
+    exit;
+}
+
+// Function to handle manual GTIN sync
+function wc_sspaa_handle_manual_gtin_sync() {
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(__('You do not have sufficient permissions to access this page.', 'woocommerce'));
+    }
+
+    // Security check
+    check_admin_referer('wc_sspaa_manual_gtin_sync');
+
+    wc_sspaa_log("[MANUAL GTIN SYNC] Admin manually triggered GTIN sync");
+    
+    try {
+        // Create API handler and GTIN updater
+        $api_handler = new WC_SSPAA_API_Handler();
+        $gtin_updater = new WC_SSPAA_GTIN_Updater($api_handler, true);
+        
+        // Perform the GTIN sync
+        $gtin_updater->update_missing_gtins();
+        
+        // Get completion statistics
+        $completion_data = get_option('wc_sspaa_last_gtin_sync_completion', array());
+        
+        wc_sspaa_log("[MANUAL GTIN SYNC] Completed manual GTIN sync");
+        
+        add_action('admin_notices', function() use ($completion_data) {
+            $message = 'GTIN sync completed successfully.';
+            if (!empty($completion_data)) {
+                $message = sprintf(
+                    'GTIN sync completed. Processed: %d, Successful updates: %d, Failed: %d, Skipped (no APN): %d',
+                    $completion_data['processed'] ?? 0,
+                    $completion_data['successful'] ?? 0,
+                    $completion_data['failed'] ?? 0,
+                    $completion_data['skipped_no_apn'] ?? 0
+                );
+            }
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Manual GTIN Sync:</strong> ' . esc_html($message) . '</p></div>';
+        });
+        
+    } catch (Exception $e) {
+        wc_sspaa_log("[MANUAL GTIN SYNC ERROR] Exception during manual GTIN sync: " . $e->getMessage());
+        add_action('admin_notices', function() use ($e) {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>GTIN Sync Error:</strong> ' . esc_html($e->getMessage()) . '</p></div>';
+        });
+    }
+    
+    // Redirect back with success message
+    $redirect_url = admin_url('edit.php?post_type=product&manual_gtin_sync_triggered=1');
     wp_safe_redirect($redirect_url);
     exit;
 }

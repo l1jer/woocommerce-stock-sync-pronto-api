@@ -9,8 +9,9 @@ class WC_SSPAA_Stock_Updater
     private $batch_size;
     private $execution_time_limit;
     private $enable_debug;
+    private $update_gtins;
 
-    public function __construct($api_handler, $delay, $burst_limit, $pause_duration, $batch_size, $execution_time_limit, $enable_debug = true)
+    public function __construct($api_handler, $delay, $burst_limit, $pause_duration, $batch_size, $execution_time_limit, $enable_debug = true, $update_gtins = false)
     {
         $this->api_handler = $api_handler;
         $this->delay = $delay;
@@ -19,6 +20,7 @@ class WC_SSPAA_Stock_Updater
         $this->batch_size = $batch_size;
         $this->execution_time_limit = $execution_time_limit;
         $this->enable_debug = $enable_debug;
+        $this->update_gtins = $update_gtins;
     }
 
     /**
@@ -28,7 +30,16 @@ class WC_SSPAA_Stock_Updater
     {
         global $wpdb;
 
-        // Fetch all products from WooCommerce that have SKUs and are not Obsolete exempt
+        // Build exclusion clause for SKUs
+        $excluded_skus_clause = '';
+        if (defined('WC_SSPAA_EXCLUDED_SKUS') && !empty(WC_SSPAA_EXCLUDED_SKUS)) {
+            $excluded_skus = array_map(array($wpdb, 'prepare'), array_fill(0, count(WC_SSPAA_EXCLUDED_SKUS), '%s'), WC_SSPAA_EXCLUDED_SKUS);
+            $excluded_skus_list = implode(',', $excluded_skus);
+            $excluded_skus_clause = " AND pm_sku.meta_value NOT IN ({$excluded_skus_list})";
+            $this->log("SKU Exclusion: The following SKUs are excluded from sync: " . implode(', ', WC_SSPAA_EXCLUDED_SKUS));
+        }
+
+        // Fetch all products from WooCommerce that have SKUs, are not Obsolete exempt, and are not in excluded SKUs list
         $products_query = 
             "SELECT p.ID, pm_sku.meta_value AS sku, p.post_type, p.post_parent 
             FROM {$wpdb->posts} p
@@ -37,6 +48,7 @@ class WC_SSPAA_Stock_Updater
             WHERE p.post_type IN ('product', 'product_variation')
             AND pm_sku.meta_value != ''
             AND (pm_obsolete.meta_id IS NULL OR pm_obsolete.meta_value = '' OR pm_obsolete.meta_value = 0) -- Exclude if Obsolete exempt meta exists and is not empty/zero
+            {$excluded_skus_clause} -- Exclude specific SKUs from sync
             ORDER BY p.ID ASC";
         
         $this->log("Executing product query: {$products_query}");
@@ -164,6 +176,11 @@ class WC_SSPAA_Stock_Updater
                         wc_update_product_stock_status($product_id, $new_status);
                         update_post_meta($product_id, '_wc_sspaa_last_sync', current_time('mysql'));
                         $this->log("Successfully updated stock for SKU: {$sku} (Product ID: {$product_id}) to {$quantity}, status: {$new_status}.");
+
+                        // Check and update GTIN if enabled and missing
+                        if ($this->update_gtins) {
+                            $this->update_product_gtin_if_missing($product_id, $sku, $product_data);
+                        }
 
                         if ($product_type === 'product_variation' && $parent_id > 0) {
                             $this->log("Updating parent product (ID: {$parent_id}) due to stock change in variation (ID: {$product_id}).");
@@ -305,6 +322,44 @@ class WC_SSPAA_Stock_Updater
         update_post_meta($parent_id, '_wc_sspaa_last_sync', $current_time);
         
         $this->log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: {$status_text}");
+    }
+
+    /**
+     * Update GTIN for a product if it's missing and APN is available in API data
+     *
+     * @param int $product_id Product ID
+     * @param string $sku Product SKU
+     * @param array $product_data API response data for the product
+     */
+    private function update_product_gtin_if_missing($product_id, $sku, $product_data)
+    {
+        // Check if GTIN already exists
+        $current_gtin = get_post_meta($product_id, '_wc_gtin', true);
+        
+        if (!empty($current_gtin)) {
+            // GTIN already exists, skip update
+            return;
+        }
+
+        // Check if APN is available in the API response
+        if (isset($product_data['apn']) && !empty($product_data['apn'])) {
+            $apn_value = trim($product_data['apn']);
+            
+            $this->log("Found missing GTIN for SKU: {$sku} (Product ID: {$product_id}), updating with APN value: {$apn_value}");
+            
+            // Update the GTIN field
+            $update_result = update_post_meta($product_id, '_wc_gtin', $apn_value);
+            
+            if ($update_result) {
+                // Also update the GTIN sync time
+                update_post_meta($product_id, '_wc_sspaa_gtin_last_sync', current_time('mysql'));
+                $this->log("Successfully updated GTIN for Product ID: {$product_id}, SKU: {$sku} with APN value: {$apn_value}");
+            } else {
+                $this->log("Failed to update GTIN meta for Product ID: {$product_id}, SKU: {$sku}");
+            }
+        } else {
+            $this->log("No APN field found in API response for SKU: {$sku} (Product ID: {$product_id}) - GTIN will remain empty");
+        }
     }
 
     private function log($message)
