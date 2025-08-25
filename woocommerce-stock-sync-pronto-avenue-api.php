@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
-Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field.
-Version: 1.4.0
+Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field and daily log file management with 14-day retention.
+Version: 1.4.1
 Author: Jerry Li
 */
 
@@ -502,11 +502,99 @@ function wc_sspaa_deactivate()
 }
 register_deactivation_hook(__FILE__, 'wc_sspaa_deactivate');
 
+/**
+ * Get information about log files
+ *
+ * @return array Log file information
+ */
+function wc_sspaa_get_log_info()
+{
+    $logs_dir = plugin_dir_path(__FILE__) . 'logs';
+    $current_date = date("Y-m-d");
+    $current_log_file = $logs_dir . '/wc-sspaa-' . $current_date . '.log';
+    
+    $log_files = array();
+    $total_size = 0;
+    $file_count = 0;
+    
+    if (is_dir($logs_dir)) {
+        $files = glob($logs_dir . '/wc-sspaa-*.log');
+        if ($files) {
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    $file_size = filesize($file);
+                    $file_date = basename($file, '.log');
+                    $file_date = str_replace('wc-sspaa-', '', $file_date);
+                    
+                    $log_files[] = array(
+                        'filename' => basename($file),
+                        'date' => $file_date,
+                        'size' => $file_size,
+                        'size_formatted' => size_format($file_size, 2),
+                        'is_current' => ($file === $current_log_file)
+                    );
+                    
+                    $total_size += $file_size;
+                    $file_count++;
+                }
+            }
+        }
+    }
+    
+    // Sort by date (newest first)
+    usort($log_files, function($a, $b) {
+        return strcmp($b['date'], $a['date']);
+    });
+    
+    return array(
+        'logs_directory' => $logs_dir,
+        'current_log_file' => $current_log_file,
+        'current_date' => $current_date,
+        'total_files' => $file_count,
+        'total_size' => $total_size,
+        'total_size_formatted' => size_format($total_size, 2),
+        'log_files' => $log_files
+    );
+}
+
 // Logging function to include timestamps and details
 function wc_sspaa_log($message)
 {
+    // Rate limiting: prevent excessive logging (max 10 logs per second)
+    static $last_log_time = 0;
+    static $log_count = 0;
+    
+    $current_time = microtime(true);
+    if ($current_time - $last_log_time < 1.0) {
+        $log_count++;
+        if ($log_count > 10) {
+            return; // Skip logging if too many logs in 1 second
+        }
+    } else {
+        $last_log_time = $current_time;
+        $log_count = 1;
+    }
+    
     $timestamp = date("Y-m-d H:i:s");
-    $log_file = plugin_dir_path(__FILE__) . 'wc-sspaa-debug.log'; // Dedicated log file
+    
+    // Create logs directory if it doesn't exist
+    $logs_dir = plugin_dir_path(__FILE__) . 'logs';
+    if (!file_exists($logs_dir)) {
+        wp_mkdir_p($logs_dir);
+        
+        // Create .htaccess to protect logs directory
+        $htaccess_content = "Order deny,allow\nDeny from all";
+        file_put_contents($logs_dir . '/.htaccess', $htaccess_content);
+        
+        // Create index.php to prevent directory listing
+        $index_content = "<?php\n// Silence is golden.";
+        file_put_contents($logs_dir . '/index.php', $index_content);
+    }
+    
+    // Create daily log file
+    $current_date = date("Y-m-d");
+    $log_file = $logs_dir . '/wc-sspaa-' . $current_date . '.log';
+    
     $new_log_entry = "[$timestamp] $message\n";
 
     if (!file_exists($log_file)) {
@@ -515,40 +603,69 @@ function wc_sspaa_log($message)
         }
     }
 
-    if (is_writable($log_file) || is_writable(dirname($log_file))) {
+    if (is_writable($log_file) || is_writable($logs_dir)) {
         file_put_contents($log_file, $new_log_entry, FILE_APPEND | LOCK_EX);
     }
 
-    $should_cleanup = (rand(1, 50) === 1) || (file_exists($log_file) && filesize($log_file) > 5242880); 
+    // Clean up old log files only occasionally (1 in 100 calls) to prevent performance issues
+    static $cleanup_counter = 0;
+    $cleanup_counter++;
     
-    if ($should_cleanup && file_exists($log_file) && is_readable($log_file) && is_writable($log_file)) {
-    $max_age_days = 7;
+    if ($cleanup_counter % 100 === 0) {
+        wc_sspaa_cleanup_old_logs($logs_dir);
+    }
+}
+
+/**
+ * Clean up old log files, keeping only the last 14 days
+ *
+ * @param string $logs_dir Path to logs directory
+ */
+function wc_sspaa_cleanup_old_logs($logs_dir)
+{
+    if (!is_dir($logs_dir) || !is_readable($logs_dir)) {
+        return;
+    }
+    
+    $max_age_days = 14;
     $max_age_seconds = $max_age_days * 86400;
     $now = time();
-
-        $lines = file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $retained_lines = [];
-        $cleanup_needed = false;
+    $files_removed = 0;
+    
+    // Get all log files in the directory
+    $log_files = glob($logs_dir . '/wc-sspaa-*.log');
+    
+    if (empty($log_files)) {
+        return;
+    }
+    
+    foreach ($log_files as $log_file) {
+        if (!is_file($log_file)) {
+            continue;
+        }
         
-        if ($lines !== false) {
-        foreach ($lines as $line) {
-            if (preg_match('/^\\[(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})\\]/', $line, $matches)) {
-                $entry_time = strtotime($matches[1]);
-                if ($entry_time !== false && ($now - $entry_time) <= $max_age_seconds) {
-                    $retained_lines[] = $line;
-                    } else {
-                        $cleanup_needed = true; 
+        // Extract date from filename (wc-sspaa-2024-01-15.log)
+        if (preg_match('/wc-sspaa-(\d{4}-\d{2}-\d{2})\.log$/', $log_file, $matches)) {
+            $file_date = $matches[1];
+            $file_timestamp = strtotime($file_date);
+            
+            if ($file_timestamp !== false && ($now - $file_timestamp) > $max_age_seconds) {
+                // File is older than 14 days, remove it
+                if (unlink($log_file)) {
+                    $files_removed++;
                 }
-            } else {
-                $retained_lines[] = $line;
             }
         }
-            
-            if ($cleanup_needed && count($retained_lines) < count($lines)) {
-        file_put_contents($log_file, implode("\n", $retained_lines) . "\n", LOCK_EX);
-                $cleanup_message = "[$timestamp] Log cleanup completed: removed " . (count($lines) - count($retained_lines)) . " old entries\n";
-                file_put_contents($log_file, $cleanup_message, FILE_APPEND | LOCK_EX);
-            }
+    }
+    
+    // Log cleanup operation (but only if we have a current log file)
+    if ($files_removed > 0) {
+        $current_date = date("Y-m-d");
+        $current_log_file = $logs_dir . '/wc-sspaa-' . $current_date . '.log';
+        
+        if (file_exists($current_log_file) && is_writable($current_log_file)) {
+            $cleanup_message = "[" . date("Y-m-d H:i:s") . "] [LOG CLEANUP] Removed {$files_removed} old log files older than {$max_age_days} days\n";
+            file_put_contents($current_log_file, $cleanup_message, FILE_APPEND | LOCK_EX);
         }
     }
 }

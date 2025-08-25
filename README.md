@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.0
+**Stable tag:** 1.4.1
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,17 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.1
+* **ENHANCED:** Improved logging system with daily log file management
+* **NEW:** Created dedicated `logs/` directory for better organisation
+* **NEW:** Daily log files (e.g., `wc-sspaa-2024-01-15.log`) for easier tracking
+* **NEW:** Automatic cleanup of log files older than 14 days
+* **NEW:** Added log file information button to admin interface
+* **NEW:** Helper function `wc_sspaa_get_log_info()` for log management
+* **ENHANCED:** Better log file security with `.htaccess` protection
+* **ENHANCED:** Improved log file organisation and retention management
+* **ENHANCED:** All classes now use daily log file structure consistently
 
 ### 1.4.0
 * **NEW:** Added comprehensive GTIN synchronisation functionality
