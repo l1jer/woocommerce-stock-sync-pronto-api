@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
-Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field and daily log file management with 14-day retention.
-Version: 1.4.1
+Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field, daily log file management with 14-day retention, and dual warehouse stock calculation for SkyWatcher Australia.
+Version: 1.4.2
 Author: Jerry Li
 */
 

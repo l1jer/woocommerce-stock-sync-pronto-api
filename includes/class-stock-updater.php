@@ -156,18 +156,48 @@ class WC_SSPAA_Stock_Updater
                         $quantity = 0;
 
                         if (isset($product_data['inventory_quantities']) && is_array($product_data['inventory_quantities'])) {
-                            foreach ($product_data['inventory_quantities'] as $inventory) {
-                                if (isset($inventory['warehouse']) && $inventory['warehouse'] === '1' && isset($inventory['quantity'])) {
-                                    $quantity = floatval($inventory['quantity']);
-                                    break;
+                            // Check if this is the SkyWatcher Australia domain for dual warehouse logic
+                            $current_domain = $this->get_current_domain();
+                            $is_skywatcher_domain = ($current_domain === 'skywatcheraustralia.com.au');
+                            
+                            if ($is_skywatcher_domain) {
+                                // Dual warehouse logic for SkyWatcher Australia: warehouse:1 + warehouse:AB
+                                $warehouse_1_qty = 0;
+                                $warehouse_ab_qty = 0;
+                                
+                                foreach ($product_data['inventory_quantities'] as $inventory) {
+                                    if (isset($inventory['warehouse']) && isset($inventory['quantity'])) {
+                                        if ($inventory['warehouse'] === '1') {
+                                            $warehouse_1_qty = floatval($inventory['quantity']);
+                                        } elseif ($inventory['warehouse'] === 'AB') {
+                                            $warehouse_ab_qty = floatval($inventory['quantity']);
+                                        }
+                                    }
                                 }
+                                
+                                // Convert negative quantities to zero, then sum them
+                                $warehouse_1_final = max(0, $warehouse_1_qty);
+                                $warehouse_ab_final = max(0, $warehouse_ab_qty);
+                                $quantity = $warehouse_1_final + $warehouse_ab_final;
+                                
+                                $this->log("DUAL WAREHOUSE CALCULATION for SKU {$sku} (Product ID: {$product_id}): warehouse:1 = {$warehouse_1_qty} (final: {$warehouse_1_final}), warehouse:AB = {$warehouse_ab_qty} (final: {$warehouse_ab_final}), combined stock = {$quantity}");
+                            } else {
+                                // Standard single warehouse logic for all other domains
+                                foreach ($product_data['inventory_quantities'] as $inventory) {
+                                    if (isset($inventory['warehouse']) && $inventory['warehouse'] === '1' && isset($inventory['quantity'])) {
+                                        $quantity = floatval($inventory['quantity']);
+                                        break;
+                                    }
+                                }
+                                
+                                if ($quantity < 0) {
+                                    $quantity = 0;
+                                }
+                                
+                                $this->log("SINGLE WAREHOUSE CALCULATION for SKU {$sku} (Product ID: {$product_id}): warehouse:1 = {$quantity}");
                             }
                         } else {
                             $this->log("WARNING: 'inventory_quantities' not found or not an array in API response for SKU {$sku} (Product ID: {$product_id}). Assuming zero stock.");
-                        }
-
-                        if ($quantity < 0) {
-                            $quantity = 0;
                         }
 
                         $this->log("Attempting to update stock for SKU: {$sku} (Product ID: {$product_id}) with quantity: {$quantity}");
@@ -360,6 +390,24 @@ class WC_SSPAA_Stock_Updater
         } else {
             $this->log("No APN field found in API response for SKU: {$sku} (Product ID: {$product_id}) - GTIN will remain empty");
         }
+    }
+
+    /**
+     * Get current domain for domain-specific logic
+     *
+     * @return string Current domain
+     */
+    private function get_current_domain()
+    {
+        // Enhanced domain detection for cron context
+        if (!empty($_SERVER['HTTP_HOST'])) {
+            return strtolower(wp_unslash($_SERVER['HTTP_HOST']));
+        }
+        
+        // Fallback to WordPress site URL
+        $site_url = get_site_url();
+        $parsed_url = parse_url($site_url);
+        return strtolower($parsed_url['host'] ?? 'unknown');
     }
 
     private function log($message)

@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.1
+**Stable tag:** 1.4.2
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,17 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.2
+* **NEW:** Implemented dual warehouse stock calculation for SkyWatcher Australia domain (skywatcheraustralia.com.au)
+* **ENHANCED:** Added domain-specific stock logic that combines warehouse:1 and warehouse:AB quantities for SkyWatcher Australia
+* **ENHANCED:** Negative stock quantities are automatically converted to zero before calculation for both warehouses
+* **ENHANCED:** All other domains continue using single warehouse:1 logic without any changes
+* **ENHANCED:** Added comprehensive logging for dual warehouse calculations showing individual and combined stock values
+* **ENHANCED:** Implemented proper domain detection within Stock Updater class for dynamic warehouse logic switching
+* **CALCULATION:** Final stock = max(0, warehouse:1) + max(0, warehouse:AB) for SkyWatcher Australia only
+* **LOGGING:** Detailed warehouse-specific logging distinguishes between single and dual warehouse calculations
+* **BACKWARD COMPATIBLE:** Maintains existing functionality for all other domains while enhancing SkyWatcher Australia specifically
 
 ### 1.4.1
 * **ENHANCED:** Improved logging system with daily log file management
