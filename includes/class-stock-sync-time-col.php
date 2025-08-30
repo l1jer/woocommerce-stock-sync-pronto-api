@@ -219,7 +219,7 @@ class WC_SSPAA_Stock_Sync_Time_Col
             
             $api_handler = new WC_SSPAA_API_Handler();
             $response = $api_handler->get_product_data($sku);
-            usleep(5000000);
+            usleep(WC_SSPAA_API_DELAY_MICROSECONDS); // Optimized delay (Task 1.4.3)
 
             $raw_response_for_log = is_string($response) ? $response : json_encode($response);
             $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;

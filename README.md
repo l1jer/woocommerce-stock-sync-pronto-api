@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.2
+**Stable tag:** 1.4.3
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,18 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.3
+* **OPTIMIZED:** Enhanced API usage performance for new 10 calls/second rate limit (Task 1.4.3)
+* **ENHANCED:** Reduced API delay from 5 seconds to 0.143 seconds (~142,857 microseconds)
+* **PERFORMANCE:** Achieved 35x faster sync speed while maintaining 30% API capacity safety margin
+* **UPDATED:** Optimized all sync methods: individual "Sync Stock" button, "Sync All Products" button, and scheduled sync
+* **ENHANCED:** Updated GTIN synchronization to use optimized delay for faster processing
+* **IMPROVED:** Updated countdown timer estimation for accurate sync time predictions
+* **BALANCED:** Target rate of 7 calls/second provides optimal balance between speed and reliability
+* **IMPACT:** Typical sync times reduced from minutes to seconds (e.g., 200 products: 16.7 min → 29 sec)
+* **MAINTAINED:** All existing logging, error handling, and user feedback mechanisms preserved
+* **CONSTANTS:** Added WC_SSPAA_API_DELAY_MICROSECONDS and WC_SSPAA_API_CALLS_PER_SECOND for consistent rate limiting
 
 ### 1.4.2
 * **NEW:** Implemented dual warehouse stock calculation for SkyWatcher Australia domain (skywatcheraustralia.com.au)

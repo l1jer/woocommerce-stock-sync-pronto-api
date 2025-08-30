@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
-Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field, daily log file management with 14-day retention, and dual warehouse stock calculation for SkyWatcher Australia.
-Version: 1.4.2
+Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field, daily log file management with 14-day retention, dual warehouse stock calculation for SkyWatcher Australia, and optimized API usage for 10 calls/second performance.
+Version: 1.4.3
 Author: Jerry Li
 */
 
@@ -36,6 +36,10 @@ define('WC_SSPAA_EXCLUDED_SKUS', array(
     '91531',
     '11074-XLT'
 ));
+
+// Define API rate limit settings (Task 1.4.3: Optimized for 10 calls/second API limit)
+define('WC_SSPAA_API_DELAY_MICROSECONDS', 142857); // ~0.143 seconds (7 calls/second with safety margin)
+define('WC_SSPAA_API_CALLS_PER_SECOND', 7);        // Target rate with 30% safety margin
 
 function wc_sspaa_activate()
 {
@@ -211,7 +215,7 @@ function wc_sspaa_execute_scheduled_sync()
         
         // Execute stock sync directly
         $api_handler = new WC_SSPAA_API_Handler();
-        $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 5000000, 0, 0, 0, 0, true); // 5 second delay
+        $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, WC_SSPAA_API_DELAY_MICROSECONDS, 0, 0, 0, 0, true); // Optimized delay
         
         wc_sspaa_log("[CRON EXECUTION] Beginning product synchronisation process...");
         $stock_updater->update_all_products();

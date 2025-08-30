@@ -138,7 +138,7 @@ class WC_SSPAA_Products_Page_Sync_Button {
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('wc_sspaa_products_page_nonce'),
-            'apiDelay' => 5000, // 5 seconds delay for countdown timer estimation
+            'apiDelay' => 143, // ~0.143 seconds delay for countdown timer estimation (Task 1.4.3)
             'strings' => array(
                 'syncing' => __('Syncing...', 'woocommerce'),
                 'syncComplete' => __('Sync Complete!', 'woocommerce'),
@@ -587,7 +587,7 @@ class WC_SSPAA_Products_Page_Sync_Button {
             
             // Create API handler and stock updater
             $api_handler = new WC_SSPAA_API_Handler();
-            $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, 5000000, 0, 0, 0, 0, true); // 5 second delay, debug enabled
+            $stock_updater = new WC_SSPAA_Stock_Updater($api_handler, WC_SSPAA_API_DELAY_MICROSECONDS, 0, 0, 0, 0, true); // Optimized delay, debug enabled
             
             // Perform the sync
             $stock_updater->update_all_products();

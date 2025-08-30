@@ -122,10 +122,11 @@ class WC_SSPAA_GTIN_Updater
 
                 $processed_count++;
 
-                // Add a small delay to respect API rate limits (1 second)
+                // Add optimized delay to respect API rate limits (Task 1.4.3)
                 if ($current_product_number < $total_to_process) {
-                    $this->log("Pausing for 1 second before processing next product (API rate limiting)");
-                    sleep(1);
+                    $delay_seconds = WC_SSPAA_API_DELAY_MICROSECONDS / 1000000;
+                    $this->log("Pausing for {$delay_seconds} seconds before processing next product (optimized API rate limiting)");
+                    usleep(WC_SSPAA_API_DELAY_MICROSECONDS);
                 }
 
             } catch (Exception $e) {
