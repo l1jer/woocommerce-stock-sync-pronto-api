@@ -138,7 +138,7 @@ class WC_SSPAA_Products_Page_Sync_Button {
         $script_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('wc_sspaa_products_page_nonce'),
-            'apiDelay' => 143, // ~0.143 seconds delay for countdown timer estimation (Task 1.4.3)
+            'apiDelay' => round(WC_SSPAA_API_DELAY_MICROSECONDS / 1000), // Actual API delay in milliseconds (Task 1.4.4.3)
             'strings' => array(
                 'syncing' => __('Syncing...', 'woocommerce'),
                 'syncComplete' => __('Sync Complete!', 'woocommerce'),
@@ -394,8 +394,9 @@ class WC_SSPAA_Products_Page_Sync_Button {
         const elapsedTime = Date.now() - syncStartTime;
         const elapsedSeconds = Math.floor(elapsedTime / 1000);
         
-        // Calculate estimated total time (3 seconds per product)
-        const estimatedTotalSeconds = totalProducts * 3;
+        // Calculate estimated total time using actual API delay (Task 1.4.4.3)
+        const apiDelaySeconds = wcSspaaProductsPage.apiDelay / 1000; // Convert milliseconds to seconds
+        const estimatedTotalSeconds = totalProducts * apiDelaySeconds;
         
         // Calculate remaining time
         const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);

@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.4.1
+**Stable tag:** 1.4.4.3
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,26 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.4.3
+* **FIXED:** Sync All Products countdown timer calculation to match optimized API rate limits from task 1.4.3
+* **UPDATED:** Timer now uses actual API delay constant (WC_SSPAA_API_DELAY_MICROSECONDS) instead of outdated 3-second estimation
+* **IMPROVED:** Countdown timer accuracy now reflects true sync speed of ~0.143 seconds per product (7 calls per second)
+* **PERFORMANCE:** Users now see realistic time estimates during bulk synchronization operations
+
+### 1.4.4.2
+* **ENHANCED:** Enhanced product-level "Sync Stock" button functionality to automatically remove "Obsolete" stock status when clicked
+* **NEW:** Obsolete products are no longer skipped during individual sync - obsolete status is automatically removed and sync proceeds
+* **IMPROVED:** Added comprehensive logging for obsolete status removal operations with Task 1.4.4.2 reference
+* **ENHANCED:** Updated AJAX response to include obsolete removal information for better user feedback
+* **NEW:** Added specialized JavaScript message for obsolete status removal: "Obsolete status removed and stock updated successfully"
+* **SECURITY:** Maintains all existing security checks (nonce verification, user capabilities) while adding new functionality
+* **COMPATIBILITY:** Works seamlessly with both simple products and product variations
+* **PERFORMANCE:** Respects API rate limiting and maintains optimal sync performance
+* **UI/UX:** Clear visual feedback when obsolete status is removed with green success indicator
+* **LOGGING:** Enhanced logging tracks obsolete detection, removal, and successful stock updates
+* **INTEGRATION:** Seamlessly integrates with existing dual warehouse calculation logic
+* **BACKWARD COMPATIBLE:** Non-obsolete products continue to work exactly as before
 
 ### 1.4.4.1
 * **UNIFIED:** Consolidated all logging to use the new daily log system in `/logs/` directory

@@ -84,7 +84,8 @@ class WC_SSPAA_Stock_Sync_Time_Col
             'nonce' => wp_create_nonce('wc_sspaa_sync_nonce'),
             'strings' => array(
                 'obsolete_exempt_message' => __('Product is Obsolete. Manual sync skipped.', 'woocommerce'),
-                'marked_obsolete_message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce')
+                'marked_obsolete_message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce'),
+                'obsolete_removed_message' => __('Obsolete status removed and stock updated successfully.', 'woocommerce')
             )
         );
         
@@ -118,6 +119,9 @@ class WC_SSPAA_Stock_Sync_Time_Col
                                 } else if (response.data.marked_obsolete) {
                                     \$lastSyncSpan.text(response.data.last_sync + ' (Now Obsolete)').css('color', 'orange');
                                     \$('<div class=\\'notice updated\\'><p>' + wcSspaaColData.strings.marked_obsolete_message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
+                                } else if (response.data.obsolete_removed) {
+                                    \$lastSyncSpan.text(response.data.last_sync).css('color', '#46b450');
+                                    \$('<div class=\\'notice updated\\'><p>' + wcSspaaColData.strings.obsolete_removed_message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
                                 } else {
                                     \$lastSyncSpan.text(response.data.last_sync).css('color', '#46b450');
                                     \$('<div class=\\'notice updated\\'><p>' + response.data.message + '</p></div>').appendTo(\$container).delay(5000).fadeOut();
@@ -183,13 +187,19 @@ class WC_SSPAA_Stock_Sync_Time_Col
             return;
         }
 
+        // Check if product is obsolete and remove obsolete status (Task 1.4.4.2)
+        $was_obsolete = false;
         if (get_post_meta($product_id, '_wc_sspaa_obsolete_exempt', true)) {
-            wc_sspaa_log("Product ID: {$product_id} (SKU: {$sku}) is Obsolete exempt. Skipping API call for manual sync.");
-            wp_send_json_success(array(
-                'message' => __('Product is Obsolete. Sync skipped.', 'woocommerce'), 
-                'is_obsolete_exempt' => true
-            ));
-            return;
+            wc_sspaa_log("Product ID: {$product_id} (SKU: {$sku}) is currently Obsolete. Removing obsolete status and proceeding with sync (Task 1.4.4.2).");
+            
+            // Remove obsolete status
+            delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt');
+            
+            // Reset stock status from obsolete (will be updated based on API response)
+            wc_update_product_stock_status($product_id, 'outofstock'); // Temporary status, will be updated after API call
+            
+            $was_obsolete = true;
+            wc_sspaa_log("Obsolete status removed for Product ID: {$product_id} (SKU: {$sku}). Proceeding with stock sync.");
         }
 
         // Check if SKU is in excluded list
@@ -311,9 +321,18 @@ class WC_SSPAA_Stock_Sync_Time_Col
                     $this->update_parent_product_stock($parent_id);
                 }
                 delete_transient($lock_transient_key);
+                
+                // Prepare success message with obsolete status removal info (Task 1.4.4.2)
+                $message = 'Stock updated successfully';
+                if ($was_obsolete) {
+                    $message .= ' (Obsolete status removed)';
+                    wc_sspaa_log("Successfully removed obsolete status and updated stock for Product ID: {$product_id} (SKU: {$sku}). New stock: {$quantity}");
+                }
+                
                 wp_send_json_success(array(
-                    'message' => 'Stock updated successfully',
-                    'last_sync' => $current_time
+                    'message' => $message,
+                    'last_sync' => $current_time,
+                    'obsolete_removed' => $was_obsolete
                 ));
             } else {
                 delete_transient($lock_transient_key);
