@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.4.3
+**Stable tag:** 1.4.4.4
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,16 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.4.4
+* **ENHANCED:** Added informative tooltip to "Sync Stock" button in WooCommerce admin product list
+* **UI/UX:** Tooltip clearly explains dual functionality: stock synchronisation and obsolete status removal
+* **ACCESSIBILITY:** Implemented using HTML title attribute for maximum compatibility and accessibility
+* **STANDARDS:** Follows WordPress best practices with proper translation function and text escaping
+* **LANGUAGE:** Uses British/Australian English spelling ("Synchronise") as per project requirements
+* **COMPREHENSIVE:** Tooltip text: "Synchronise product stock from API. If product is marked as Obsolete, this will also remove the Obsolete status and restore normal stock synchronisation."
+* **COMPATIBILITY:** Works for both simple and variable products wherever the Sync Stock button appears
+* **INTEGRATION:** Maintains all existing button functionality while adding helpful user guidance
 
 ### 1.4.4.3
 * **FIXED:** Sync All Products countdown timer calculation to match optimized API rate limits from task 1.4.3

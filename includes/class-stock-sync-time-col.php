@@ -46,7 +46,8 @@ class WC_SSPAA_Stock_Sync_Time_Col
             }            
 
             if ($sku) {
-                echo '<button type="button" class="button wc-sspaa-sync-stock" data-product-id="' . esc_attr($post_id) . '" data-sku="' . esc_attr($sku) . '">Sync Stock</button>';
+                $tooltip_text = __('Synchronise product stock from API. If product is marked as Obsolete, this will also remove the Obsolete status and restore normal stock synchronisation.', 'woocommerce');
+                echo '<button type="button" class="button wc-sspaa-sync-stock" data-product-id="' . esc_attr($post_id) . '" data-sku="' . esc_attr($sku) . '" title="' . esc_attr($tooltip_text) . '">Sync Stock</button>';
                 echo '<span class="spinner" style="float: none; margin-top: 0;"></span>';
             } else {
                 echo '<span style="color: #999;">No SKU</span>';
