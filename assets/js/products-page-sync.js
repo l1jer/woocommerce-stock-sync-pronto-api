@@ -24,6 +24,55 @@ jQuery(document).ready(function($) {
         startSync();
     });
 
+    // Handle GTIN sync button click
+    $("#wc-sspaa-sync-missing-gtins").on("click", function(e) {
+        e.preventDefault();
+        
+        // First get GTIN statistics
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_get_gtin_stats",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const stats = response.data;
+                    const missingCount = stats.missing_gtin;
+                    
+                    if (missingCount === 0) {
+                        showNotice("✅ All products already have GTINs. No sync needed.", "success");
+                        return;
+                    }
+                    
+                    // Confirm action with statistics
+                    const confirmMsg = "This will sync GTINs for " + missingCount + " products that are missing GTINs.\n" +
+                                     "Current GTIN status: " + stats.total_with_gtin + " of " + stats.total_with_sku + 
+                                     " products have GTINs (" + stats.percentage_with_gtin + "%).\n\n" +
+                                     "This may take a while. Continue?";
+                    
+                    if (!confirm(confirmMsg)) {
+                        return;
+                    }
+                    
+                    startGtinSync();
+                } else {
+                    showNotice("❌ Error getting GTIN statistics: " + response.data.message, "error");
+                }
+            },
+            error: function() {
+                showNotice("❌ Error communicating with server", "error");
+            }
+        });
+    });
+
+    // Handle GTIN stats button click
+    $("#wc-sspaa-show-gtin-stats").on("click", function(e) {
+        e.preventDefault();
+        showGtinStats();
+    });
+
     function startSync() {
         const $button = $("#wc-sspaa-sync-all-products-page");
         const $spinner = $("#wc-sspaa-sync-spinner");
@@ -104,8 +153,9 @@ jQuery(document).ready(function($) {
         const elapsedTime = Date.now() - syncStartTime;
         const elapsedSeconds = Math.floor(elapsedTime / 1000);
         
-        // Calculate estimated total time (3 seconds per product)
-        const estimatedTotalSeconds = totalProducts * 5;
+        // Calculate estimated total time using actual API delay (Task 1.4.4.3)
+        const apiDelaySeconds = wcSspaaProductsPage.apiDelay / 1000; // Convert milliseconds to seconds
+        const estimatedTotalSeconds = totalProducts * apiDelaySeconds;
         
         // Calculate remaining time
         const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
@@ -126,11 +176,81 @@ jQuery(document).ready(function($) {
         $("#wc-sspaa-progress-text").text(progressText);
     }
 
+    function startGtinSync() {
+        const $button = $("#wc-sspaa-sync-missing-gtins");
+        const $spinner = $("#wc-sspaa-gtin-spinner");
+        
+        // Disable button and show spinner
+        $button.prop("disabled", true).text("Syncing GTINs...");
+        $spinner.addClass("is-active");
+        
+        // Clear any previous notices
+        $(".wc-sspaa-notice").remove();
+        
+        // Send AJAX request
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_sync_missing_gtins",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            timeout: 0, // No timeout - let it run as long as needed
+            success: function(response) {
+                if (response.success) {
+                    showNotice("✅ " + response.data.message, "success");
+                } else {
+                    showNotice("❌ Error: " + response.data.message, "error");
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                let errorMsg = "Network error occurred: " + textStatus;
+                if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+                    errorMsg = jqXHR.responseJSON.data.message;
+                }
+                showNotice("❌ " + errorMsg, "error");
+                console.error("GTIN Sync AJAX Error:", textStatus, errorThrown, jqXHR);
+            },
+            complete: function() {
+                // Re-enable button
+                $button.prop("disabled", false).text("Sync Missing GTINs");
+                $spinner.removeClass("is-active");
+            }
+        });
+    }
+
+    function showGtinStats() {
+        $.ajax({
+            url: wcSspaaProductsPage.ajaxUrl,
+            type: "POST",
+            data: {
+                action: "wc_sspaa_get_gtin_stats",
+                nonce: wcSspaaProductsPage.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    const stats = response.data;
+                    const message = "📊 <strong>GTIN Statistics:</strong><br>" +
+                                  "• Total products with SKUs: " + stats.total_with_sku + "<br>" +
+                                  "• Products with GTINs: " + stats.total_with_gtin + "<br>" +
+                                  "• Missing GTINs: " + stats.missing_gtin + "<br>" +
+                                  "• Completion rate: " + stats.percentage_with_gtin + "%";
+                    showNotice(message, "info");
+                } else {
+                    showNotice("❌ Error getting GTIN statistics: " + response.data.message, "error");
+                }
+            },
+            error: function() {
+                showNotice("❌ Error communicating with server", "error");
+            }
+        });
+    }
+
     function showNotice(message, type) {
-        const $notice = $('<div class="wc-sspaa-notice ' + type + '">')
+        const $notice = $("<div class=\"wc-sspaa-notice " + type + "\">")
             .html(message)
             .insertAfter(".wp-header-end")
-            .delay(8000)
+            .delay(10000)
             .fadeOut(400, function() { $(this).remove(); });
     }
 
@@ -156,4 +276,4 @@ jQuery(document).ready(function($) {
 
     // Update product count every 60 seconds
     setInterval(updateProductCount, 60000);
-}); 
+});

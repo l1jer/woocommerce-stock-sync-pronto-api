@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.4.4
+**Stable tag:** 1.4.5
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,19 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.5
+* **FIXED:** Resolved GTIN checker button and GTIN status functionality not working when clicked
+* **ROOT CAUSE:** JavaScript file was outdated and missing GTIN functionality implementation
+* **SOLUTION:** Regenerated JavaScript file with complete GTIN button event handlers and functions
+* **VERIFIED:** GTIN sync button now properly triggers GTIN synchronisation with confirmation dialog
+* **VERIFIED:** GTIN stats button now displays comprehensive statistics (total products, GTIN coverage, completion rate)
+* **ENHANCED:** Improved error handling and user feedback for GTIN operations
+* **SECURITY:** Confirmed proper nonce verification and user capability checks for GTIN AJAX actions
+* **COMPATIBILITY:** All GTIN functionality now works seamlessly with existing plugin structure
+* **TESTING:** Comprehensive test suite confirms all GTIN features are operational
+* **UI/UX:** GTIN buttons now provide proper visual feedback (spinners, disabled states) during operations
+* **LOGGING:** GTIN operations properly logged with detailed sync results and error information
 
 ### 1.4.4.4
 * **ENHANCED:** Added informative tooltip to "Sync Stock" button in WooCommerce admin product list
