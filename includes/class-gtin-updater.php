@@ -291,20 +291,8 @@ class WC_SSPAA_GTIN_Updater
     private function log($message)
     {
         if ($this->enable_debug) {
-            $timestamp = date('Y-m-d H:i:s');
-            $log_file = plugin_dir_path(__FILE__) . '../wc-sspaa-debug.log';
-            
-            // Ensure proper file permissions and create file if it doesn't exist
-            if (!file_exists($log_file)) {
-                if (touch($log_file)) {
-                    chmod($log_file, 0644);
-                }
-            }
-            
-            // Write to dedicated log file with GTIN prefix
-            if (is_writable($log_file) || is_writable(dirname($log_file))) {
-                error_log("[$timestamp] [GTIN] $message\n", 3, $log_file);
-            }
+            // Use the main plugin logging function with GTIN prefix
+            wc_sspaa_log("[GTIN] {$message}");
         }
     }
 }

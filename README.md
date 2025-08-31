@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.3
+**Stable tag:** 1.4.4.1
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,28 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.4.1
+* **UNIFIED:** Consolidated all logging to use the new daily log system in `/logs/` directory
+* **CLEANED:** Removed legacy `wc-sspaa-debug.log` file - all classes now use consistent logging
+* **FIXED:** Updated Stock Updater class to use `wc_sspaa_log()` instead of deprecated debug log
+* **CONSISTENCY:** All plugin components now log to the same daily log files (`/logs/wc-sspaa-YYYY-MM-DD.log`)
+* **MAINTENANCE:** Eliminated dual logging system that was writing to both old and new log locations
+* **IMPROVED:** Better log organization with single, centralized logging location
+
+### 1.4.4
+* **REVIEWED:** Completed comprehensive review of GTIN (Global Trade Item Number) implementation from task 1.4.0
+* **VERIFIED:** Confirmed GTIN buttons are properly displayed on WooCommerce All Products admin page
+* **ENHANCED:** Ensured GTIN functionality is working correctly with proper AJAX handlers and JavaScript event handlers
+* **FIXED:** Updated GTIN updater logging to use new daily log system instead of legacy debug.log
+* **VALIDATED:** GTIN statistics method exists and functions correctly for tracking GTIN completion rates
+* **CONFIRMED:** "Sync Missing GTINs" button properly updates missing GTINs from API APN field with confirmation dialog
+* **VERIFIED:** "GTIN Stats" button displays comprehensive statistics including total products, GTIN coverage, and completion percentage
+* **SECURITY:** All AJAX handlers include proper nonce verification and user capability checks
+* **INTEGRATION:** GTIN extraction from API APN field working correctly with real API responses
+* **LOGGING:** Enhanced logging system with [GTIN] prefix for better debugging and tracking
+* **UI/UX:** Buttons properly styled and integrated with WooCommerce admin interface
+* **PERFORMANCE:** GTIN sync respects API rate limits and includes proper error handling
 
 ### 1.4.3
 * **OPTIMIZED:** Enhanced API usage performance for new 10 calls/second rate limit (Task 1.4.3)
