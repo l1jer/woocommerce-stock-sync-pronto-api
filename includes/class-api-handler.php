@@ -19,24 +19,70 @@ class WC_SSPAA_API_Handler
     }
 
     /**
-     * Get product data from API
+     * Get product data from API with fallback support (Task 1.4.7)
      *
      * @param string $sku The product SKU to fetch
      * @return array|null Product data or null on error
      */
     public function get_product_data($sku)
     {
+        // Try primary API first
+        $primary_result = $this->get_product_data_from_endpoint($sku, 'primary');
+        
+        // Check if primary API response is valid
+        if ($this->is_valid_api_response($primary_result, $sku)) {
+            return $primary_result;
+        }
+        
+        // If primary API failed or returned invalid data, try fallback API
+        wc_sspaa_log("[FALLBACK API] Primary API failed or returned invalid data for SKU: {$sku}. Attempting fallback API.");
+        
+        $fallback_result = $this->get_product_data_from_endpoint($sku, 'fallback');
+        
+        // Check if fallback API response is valid
+        if ($this->is_valid_api_response($fallback_result, $sku)) {
+            wc_sspaa_log("[FALLBACK API] Successfully retrieved valid data for SKU: {$sku} from fallback API.");
+            return $fallback_result;
+        }
+        
+        // Both APIs failed
+        wc_sspaa_log("[FALLBACK API] Both primary and fallback APIs failed for SKU: {$sku}. Returning null.");
+        return $primary_result; // Return primary result for consistent error handling
+    }
+    
+    /**
+     * Get product data from specific API endpoint (Task 1.4.7)
+     *
+     * @param string $sku The product SKU to fetch
+     * @param string $endpoint_type 'primary' or 'fallback'
+     * @return array|null Product data or null on error
+     */
+    private function get_product_data_from_endpoint($sku, $endpoint_type = 'primary')
+    {
         // Determine context
         $context = (defined('DOING_CRON') && DOING_CRON) ? 'cron' : (is_admin() ? 'admin' : 'frontend');
-        $log_prefix = "[Context: $context] [Username: {$this->username}] [Domain: " . ($_SERVER['HTTP_HOST'] ?? 'N/A') . "] ";
+        
+        // Set endpoint-specific configuration
+        if ($endpoint_type === 'fallback') {
+            $api_url = WCAP_API_URL_FALLBACK; // Use existing config constant
+            $username = $this->username; // Same credentials work for both endpoints
+            $password = $this->password; // Same credentials work for both endpoints
+            $log_prefix = "[Context: $context] [FALLBACK API] [Username: {$username}] [Domain: " . ($_SERVER['HTTP_HOST'] ?? 'N/A') . "] ";
+        } else {
+            $api_url = $this->api_url;
+            $username = $this->username;
+            $password = $this->password;
+            $log_prefix = "[Context: $context] [PRIMARY API] [Username: {$username}] [Domain: " . ($_SERVER['HTTP_HOST'] ?? 'N/A') . "] ";
+        }
 
-        $url = $this->api_url . '?code=' . urlencode($sku);
+        $url = $api_url . '?code=' . urlencode($sku);
         wc_sspaa_log($log_prefix . 'Requesting URL: ' . $url);
 
         $response = wp_remote_get($url, array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($this->username . ':' . $this->password)
-            )
+                'Authorization' => 'Basic ' . base64_encode($username . ':' . $password)
+            ),
+            'timeout' => 30 // Increased timeout for fallback scenarios
         ));
 
         if (is_wp_error($response)) {
@@ -59,7 +105,53 @@ class WC_SSPAA_API_Handler
     }
     
     /**
-     * Test API connection with specified or default credentials
+     * Check if API response is valid for stock synchronisation (Task 1.4.7)
+     *
+     * @param array|null $response API response data
+     * @param string $sku SKU being processed
+     * @return bool True if response is valid for stock sync
+     */
+    private function is_valid_api_response($response, $sku)
+    {
+        // Null response is invalid
+        if ($response === null) {
+            wc_sspaa_log("[API VALIDATION] Response is null for SKU: {$sku}");
+            return false;
+        }
+        
+        // Must be array
+        if (!is_array($response)) {
+            wc_sspaa_log("[API VALIDATION] Response is not an array for SKU: {$sku}");
+            return false;
+        }
+        
+        // Empty products array indicates obsolete product (valid response, but no stock data)
+        if (isset($response['products']) && empty($response['products']) && 
+            isset($response['count']) && $response['count'] === 0 && 
+            isset($response['pages']) && $response['pages'] === 0) {
+            wc_sspaa_log("[API VALIDATION] Valid obsolete response for SKU: {$sku} (empty products array)");
+            return true; // This is a valid response indicating obsolete product
+        }
+        
+        // Must have products array with data
+        if (!isset($response['products']) || !is_array($response['products']) || empty($response['products'])) {
+            wc_sspaa_log("[API VALIDATION] No products array or empty products for SKU: {$sku}");
+            return false;
+        }
+        
+        // First product must have inventory_quantities for stock sync
+        $product_data = $response['products'][0];
+        if (!isset($product_data['inventory_quantities']) || !is_array($product_data['inventory_quantities'])) {
+            wc_sspaa_log("[API VALIDATION] No inventory_quantities found for SKU: {$sku}");
+            return false;
+        }
+        
+        wc_sspaa_log("[API VALIDATION] Valid response with stock data for SKU: {$sku}");
+        return true;
+    }
+    
+    /**
+     * Test API connection with specified or default credentials (Task 1.4.7: Enhanced with fallback support)
      *
      * @return array Test result with status and message
      */
@@ -67,9 +159,51 @@ class WC_SSPAA_API_Handler
     {
         $test_sku = 'TEST'; // Use a generic SKU for testing
         
-        $response = wp_remote_get($this->api_url . '?code=' . urlencode($test_sku), array(
+        // Test primary API first
+        $primary_result = $this->test_single_endpoint($this->api_url, $this->username, $this->password, 'Primary');
+        
+        if ($primary_result['success']) {
+            return $primary_result;
+        }
+        
+        // Test fallback API if primary fails
+        $fallback_result = $this->test_single_endpoint(
+            WCAP_API_URL_FALLBACK, 
+            $this->username, 
+            $this->password, 
+            'Fallback'
+        );
+        
+        if ($fallback_result['success']) {
+            return array(
+                'success' => true,
+                'message' => 'Primary API failed, but Fallback API Connection Successful'
+            );
+        }
+        
+        // Both failed
+        return array(
+            'success' => false,
+            'message' => 'Both Primary and Fallback API connections failed. Primary: ' . $primary_result['message'] . '. Fallback: ' . $fallback_result['message']
+        );
+    }
+    
+    /**
+     * Test a single API endpoint (Task 1.4.7)
+     *
+     * @param string $api_url API endpoint URL
+     * @param string $username API username
+     * @param string $password API password
+     * @param string $endpoint_name Name for logging (Primary/Fallback)
+     * @return array Test result with status and message
+     */
+    private function test_single_endpoint($api_url, $username, $password, $endpoint_name)
+    {
+        $test_sku = 'TEST';
+        
+        $response = wp_remote_get($api_url . '?code=' . urlencode($test_sku), array(
             'headers' => array(
-                'Authorization' => 'Basic ' . base64_encode($this->username . ':' . $this->password)
+                'Authorization' => 'Basic ' . base64_encode($username . ':' . $password)
             ),
             'timeout' => 15
         ));
@@ -77,7 +211,7 @@ class WC_SSPAA_API_Handler
         if (is_wp_error($response)) {
             return array(
                 'success' => false,
-                'message' => 'API Connection Failed: ' . $response->get_error_message()
+                'message' => $endpoint_name . ' API Connection Failed: ' . $response->get_error_message()
             );
         }
         
@@ -86,14 +220,14 @@ class WC_SSPAA_API_Handler
         if ($status_code === 401) {
             return array(
                 'success' => false,
-                'message' => 'API Connection Failed: Authentication error (Invalid credentials)'
+                'message' => $endpoint_name . ' API Connection Failed: Authentication error (Invalid credentials)'
             );
         }
         
         if ($status_code < 200 || $status_code >= 300) {
             return array(
                 'success' => false,
-                'message' => 'API Connection Failed: Received HTTP status ' . $status_code
+                'message' => $endpoint_name . ' API Connection Failed: Received HTTP status ' . $status_code
             );
         }
         
@@ -103,13 +237,13 @@ class WC_SSPAA_API_Handler
         if (json_last_error() !== JSON_ERROR_NONE) {
             return array(
                 'success' => false,
-                'message' => 'API Connection Failed: Invalid JSON response'
+                'message' => $endpoint_name . ' API Connection Failed: Invalid JSON response'
             );
         }
         
         return array(
             'success' => true,
-            'message' => 'API Connection Successful'
+            'message' => $endpoint_name . ' API Connection Successful'
         );
     }
 }

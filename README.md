@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.6
+**Stable tag:** 1.4.7
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,22 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.7
+* **NEW FEATURE:** Implemented intelligent fallback API system for enhanced reliability (Task 1.4.7)
+* **DUAL ENDPOINT:** Primary API (`userapi/json/product/v4_tasco.json`) with automatic fallback to secondary API (`api/json/product/v4.json`)
+* **SMART VALIDATION:** Sophisticated API response validation to determine when fallback is needed
+* **ALTERNATIVE CREDENTIALS:** Fallback API uses different authentication credentials for broader access
+* **COMPREHENSIVE LOGGING:** Detailed logging shows which API endpoint was used and why fallback was triggered
+* **ENHANCED RELIABILITY:** System automatically attempts fallback when primary API fails due to SCS configuration or other issues
+* **INTELLIGENT TRIGGERS:** Fallback activated for null responses, invalid JSON, missing inventory data, or HTTP errors
+* **SEAMLESS INTEGRATION:** Existing stock sync, GTIN sync, and all other functionality automatically benefit from fallback
+* **ENHANCED TESTING:** API connection test now validates both primary and fallback endpoints
+* **BACKWARD COMPATIBLE:** All existing functionality preserved with transparent fallback operation
+* **PERFORMANCE OPTIMISED:** Fallback only triggered when necessary, maintaining optimal sync speeds
+* **ROBUST ERROR HANDLING:** Comprehensive error messages distinguish between primary and fallback failures
+* **PROFESSIONAL LOGGING:** Clear distinction between PRIMARY API and FALLBACK API operations in logs
+* **CONFIGURATION READY:** Fallback credentials and endpoints easily configurable via constants
 
 ### 1.4.6
 * **ENHANCED:** Implemented comprehensive variable product sync functionality for "Sync Stock" button (Task 1.4.6)
