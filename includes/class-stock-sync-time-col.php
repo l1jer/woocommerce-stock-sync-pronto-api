@@ -34,6 +34,17 @@ class WC_SSPAA_Stock_Sync_Time_Col
             $sku = get_post_meta($post_id, '_sku', true);
             $is_obsolete_exempt = get_post_meta($post_id, '_wc_sspaa_obsolete_exempt', true);
             
+            // Check if this is a variable product (Task 1.4.6)
+            $product_post = get_post($post_id);
+            $is_variable_product = ($product_post && $product_post->post_type === 'product' && !$sku);
+            
+            // For variable products, check if it has variations with SKUs
+            $has_variations_with_skus = false;
+            if ($is_variable_product) {
+                $variations = $this->get_product_variations($post_id);
+                $has_variations_with_skus = !empty($variations);
+            }
+            
             echo '<div class="wc-sspaa-sync-container">';
             if ($last_sync) {
                 echo '<span class="wc-sspaa-last-sync" style="color: #999; white-space: nowrap; display: block; margin-bottom: 5px;">' . esc_html($last_sync) . '</span>';
@@ -45,9 +56,20 @@ class WC_SSPAA_Stock_Sync_Time_Col
                 echo '<span style="color: red; display: block; margin-bottom: 5px; font-weight: bold;">Obsolete</span>';
             }            
 
+            // Show sync button for simple products with SKUs OR variable products with variations that have SKUs
             if ($sku) {
+                // Simple product or variation with SKU
                 $tooltip_text = __('Synchronise product stock from API. If product is marked as Obsolete, this will also remove the Obsolete status and restore normal stock synchronisation.', 'woocommerce');
-                echo '<button type="button" class="button wc-sspaa-sync-stock" data-product-id="' . esc_attr($post_id) . '" data-sku="' . esc_attr($sku) . '" title="' . esc_attr($tooltip_text) . '">Sync Stock</button>';
+                echo '<button type="button" class="button wc-sspaa-sync-stock" data-product-id="' . esc_attr($post_id) . '" data-sku="' . esc_attr($sku) . '" data-product-type="simple" title="' . esc_attr($tooltip_text) . '">Sync Stock</button>';
+                echo '<span class="spinner" style="float: none; margin-top: 0;"></span>';
+            } elseif ($is_variable_product && $has_variations_with_skus) {
+                // Variable product with variations that have SKUs (Task 1.4.6)
+                $variation_count = count($this->get_product_variations($post_id));
+                $tooltip_text = sprintf(
+                    __('Synchronise stock for all %d variations of this variable product from API. If any variations are marked as Obsolete, this will also remove the Obsolete status and restore normal stock synchronisation.', 'woocommerce'),
+                    $variation_count
+                );
+                echo '<button type="button" class="button wc-sspaa-sync-stock wc-sspaa-sync-variable" data-product-id="' . esc_attr($post_id) . '" data-sku="" data-product-type="variable" data-variation-count="' . esc_attr($variation_count) . '" title="' . esc_attr($tooltip_text) . '">Sync All Variations (' . $variation_count . ')</button>';
                 echo '<span class="spinner" style="float: none; margin-top: 0;"></span>';
             } else {
                 echo '<span style="color: #999;">No SKU</span>';
@@ -103,15 +125,16 @@ class WC_SSPAA_Stock_Sync_Time_Col
                     \$button.prop('disabled', true);
                     \$spinner.addClass('is-active');
 
-                    $.ajax({
-                        url: wcSspaaColData.ajaxUrl,
-                        type: 'POST',
-                        data: {
-                            action: 'wc_sspaa_sync_single_product',
-                            nonce: wcSspaaColData.nonce,
-                            product_id: \$button.data('product-id'),
-                            sku: \$button.data('sku')
-                        },
+                                            $.ajax({
+                            url: wcSspaaColData.ajaxUrl,
+                            type: 'POST',
+                            data: {
+                                action: 'wc_sspaa_sync_single_product',
+                                nonce: wcSspaaColData.nonce,
+                                product_id: \$button.data('product-id'),
+                                sku: \$button.data('sku'),
+                                product_type: \$button.data('product-type') || 'simple'
+                            },
                         success: function(response) {
                             if (response.success) {
                                 if (response.data.is_obsolete_exempt) {
@@ -179,15 +202,30 @@ class WC_SSPAA_Stock_Sync_Time_Col
 
         $product_id = isset($_POST['product_id']) ? absint($_POST['product_id']) : 0;
         $sku = isset($_POST['sku']) ? sanitize_text_field($_POST['sku']) : '';
+        $product_type = isset($_POST['product_type']) ? sanitize_text_field($_POST['product_type']) : 'simple';
         
-        wc_sspaa_log("Processing single sync request - Product ID: {$product_id}, SKU: {$sku}");
+        wc_sspaa_log("Processing single sync request - Product ID: {$product_id}, SKU: {$sku}, Type: {$product_type}");
         
-        if (!$product_id || !$sku) {
-            wc_sspaa_log('Error: Invalid product ID or SKU for single product sync');
-            wp_send_json_error(array('message' => 'Invalid product ID or SKU'));
+        if (!$product_id) {
+            wc_sspaa_log('Error: Invalid product ID for single product sync');
+            wp_send_json_error(array('message' => 'Invalid product ID'));
+            return;
+        }
+        
+        // For simple products, SKU is required. For variable products, we'll sync variations
+        if ($product_type === 'simple' && !$sku) {
+            wc_sspaa_log('Error: SKU required for simple product sync');
+            wp_send_json_error(array('message' => 'SKU required for simple product'));
             return;
         }
 
+        // Handle variable product sync (Task 1.4.6)
+        if ($product_type === 'variable') {
+            $this->sync_variable_product($product_id);
+            return;
+        }
+        
+        // Handle simple product sync (existing logic)
         // Check if product is obsolete and remove obsolete status (Task 1.4.4.2)
         $was_obsolete = false;
         if (get_post_meta($product_id, '_wc_sspaa_obsolete_exempt', true)) {
@@ -348,6 +386,265 @@ class WC_SSPAA_Stock_Sync_Time_Col
     }
     
     /**
+     * Sync all variations of a variable product (Task 1.4.6)
+     *
+     * @param int $variable_product_id The variable product ID
+     */
+    private function sync_variable_product($variable_product_id)
+    {
+        wc_sspaa_log("Starting variable product sync for Product ID: {$variable_product_id} (Task 1.4.6)");
+        
+        // Get all variations with SKUs
+        $variations = $this->get_product_variations($variable_product_id);
+        
+        if (empty($variations)) {
+            wc_sspaa_log("No variations with SKUs found for variable product ID: {$variable_product_id}");
+            wp_send_json_error(array('message' => 'No variations with SKUs found for this variable product'));
+            return;
+        }
+        
+        $total_variations = count($variations);
+        wc_sspaa_log("Found {$total_variations} variations to sync for variable product ID: {$variable_product_id}");
+        
+        $successful_syncs = 0;
+        $failed_syncs = 0;
+        $obsolete_removed_count = 0;
+        $sync_results = array();
+        
+        // Create lock to prevent concurrent syncs
+        $lock_transient_key = 'wc_sspaa_sync_lock_variable_' . $variable_product_id;
+        if (get_transient($lock_transient_key)) {
+            wc_sspaa_log("Variable product sync already in progress for Product ID: {$variable_product_id}");
+            wp_send_json_error(array('message' => 'Sync already in progress for this variable product'));
+            return;
+        }
+        set_transient($lock_transient_key, true, 300); // 5 minute lock
+        
+        try {
+            $api_handler = new WC_SSPAA_API_Handler();
+            
+            foreach ($variations as $index => $variation) {
+                $variation_id = $variation->ID;
+                $variation_sku = $variation->sku;
+                $current_variation = $index + 1;
+                
+                wc_sspaa_log("Syncing variation {$current_variation}/{$total_variations} - ID: {$variation_id}, SKU: {$variation_sku}");
+                
+                // Check if variation is obsolete and remove obsolete status (Task 1.4.4.2)
+                $was_obsolete = false;
+                if (get_post_meta($variation_id, '_wc_sspaa_obsolete_exempt', true)) {
+                    wc_sspaa_log("Variation ID: {$variation_id} (SKU: {$variation_sku}) is currently Obsolete. Removing obsolete status.");
+                    delete_post_meta($variation_id, '_wc_sspaa_obsolete_exempt');
+                    wc_update_product_stock_status($variation_id, 'outofstock');
+                    $was_obsolete = true;
+                    $obsolete_removed_count++;
+                    wc_sspaa_log("Obsolete status removed for variation ID: {$variation_id} (SKU: {$variation_sku})");
+                }
+                
+                // Check if SKU is in excluded list
+                if (defined('WC_SSPAA_EXCLUDED_SKUS') && in_array($variation_sku, WC_SSPAA_EXCLUDED_SKUS)) {
+                    wc_sspaa_log("Variation SKU {$variation_sku} is in excluded list. Skipping sync.");
+                    $failed_syncs++;
+                    continue;
+                }
+                
+                try {
+                    // Get API data for this variation
+                    $response = $api_handler->get_product_data($variation_sku);
+                    usleep(WC_SSPAA_API_DELAY_MICROSECONDS); // API rate limiting
+                    
+                    if ($this->process_variation_sync_response($variation_id, $variation_sku, $response)) {
+                        $successful_syncs++;
+                        $sync_results[] = "✅ {$variation_sku}";
+                    } else {
+                        $failed_syncs++;
+                        $sync_results[] = "❌ {$variation_sku}";
+                    }
+                    
+                } catch (Exception $e) {
+                    wc_sspaa_log("Error syncing variation ID: {$variation_id} (SKU: {$variation_sku}) - " . $e->getMessage());
+                    $failed_syncs++;
+                    $sync_results[] = "❌ {$variation_sku} (Error: " . $e->getMessage() . ")";
+                }
+            }
+            
+            // Update parent product stock and last sync time
+            $this->update_parent_product_stock($variable_product_id);
+            $current_time = current_time('mysql');
+            update_post_meta($variable_product_id, '_wc_sspaa_last_sync', $current_time);
+            
+            delete_transient($lock_transient_key);
+            
+            // Prepare success message
+            $message = sprintf(
+                'Variable product sync completed. Synced %d/%d variations successfully.',
+                $successful_syncs,
+                $total_variations
+            );
+            
+            if ($obsolete_removed_count > 0) {
+                $message .= sprintf(' Removed obsolete status from %d variations.', $obsolete_removed_count);
+            }
+            
+            wc_sspaa_log("Variable product sync completed for Product ID: {$variable_product_id}. Success: {$successful_syncs}, Failed: {$failed_syncs}, Obsolete removed: {$obsolete_removed_count}");
+            
+            wp_send_json_success(array(
+                'message' => $message,
+                'last_sync' => $current_time,
+                'successful_syncs' => $successful_syncs,
+                'failed_syncs' => $failed_syncs,
+                'total_variations' => $total_variations,
+                'obsolete_removed' => $obsolete_removed_count,
+                'sync_results' => $sync_results
+            ));
+            
+        } catch (Exception $e) {
+            delete_transient($lock_transient_key);
+            wc_sspaa_log('Error in variable product sync for Product ID: ' . $variable_product_id . ' - ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Error syncing variable product: ' . $e->getMessage()));
+        }
+    }
+    
+    /**
+     * Process sync response for a single variation
+     *
+     * @param int $variation_id The variation ID
+     * @param string $variation_sku The variation SKU
+     * @param array|null $response API response
+     * @return bool Success status
+     */
+    private function process_variation_sync_response($variation_id, $variation_sku, $response)
+    {
+        $raw_response_for_log = is_string($response) ? $response : json_encode($response);
+        $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;
+        wc_sspaa_log("Variation Sync API Response for SKU {$variation_sku}: {$loggable_response}");
+        
+        if (is_array($response) && 
+            isset($response['products']) && empty($response['products']) && 
+            isset($response['count']) && $response['count'] === 0 && 
+            isset($response['pages']) && $response['pages'] === 0) {
+            
+            // Mark variation as obsolete
+            update_post_meta($variation_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+            update_post_meta($variation_id, '_stock', 0);
+            wc_update_product_stock_status($variation_id, 'obsolete');
+            $current_time = current_time('mysql');
+            update_post_meta($variation_id, '_wc_sspaa_last_sync', $current_time);
+            wc_sspaa_log("Variation SKU {$variation_sku} (ID: {$variation_id}) marked as Obsolete with 'obsolete' stock status. Stock set to 0.");
+            
+            return true; // Consider this a successful sync (marked as obsolete)
+        }
+        
+        if (!is_array($response) || !isset($response['products']) || empty($response['products'])) {
+            wc_sspaa_log("No valid product data found for variation SKU: {$variation_sku}");
+            return false;
+        }
+        
+        $product_data = $response['products'][0];
+        
+        if (!isset($product_data['inventory_quantities']) || empty($product_data['inventory_quantities'])) {
+            wc_sspaa_log("No inventory data found for variation SKU: {$variation_sku}");
+            return false;
+        }
+        
+        // Apply dual warehouse logic for skywatcheraustralia.com.au domain (same as Task 1.4.2)
+        $current_domain = $this->get_current_domain();
+        $final_stock_quantity = 0;
+        
+        if ($current_domain === 'skywatcheraustralia.com.au') {
+            // Dual warehouse calculation
+            $warehouse1_qty = 0;
+            $warehouseAB_qty = 0;
+            
+            foreach ($product_data['inventory_quantities'] as $inventory) {
+                if (isset($inventory['warehouse']) && isset($inventory['quantity'])) {
+                    $warehouse = $inventory['warehouse'];
+                    $quantity = floatval($inventory['quantity']);
+                    
+                    if ($warehouse === '1') {
+                        $warehouse1_qty = $quantity;
+                    } elseif ($warehouse === 'AB') {
+                        $warehouseAB_qty = $quantity;
+                    }
+                }
+            }
+            
+            $final_warehouse1 = max(0, $warehouse1_qty);
+            $final_warehouseAB = max(0, $warehouseAB_qty);
+            $final_stock_quantity = $final_warehouse1 + $final_warehouseAB;
+            
+            wc_sspaa_log("DUAL WAREHOUSE calculation for variation SKU {$variation_sku}: warehouse:1 = {$warehouse1_qty} (final: {$final_warehouse1}), warehouse:AB = {$warehouseAB_qty} (final: {$final_warehouseAB}), combined = {$final_stock_quantity}");
+        } else {
+            // Single warehouse calculation (warehouse:1 only)
+            foreach ($product_data['inventory_quantities'] as $inventory) {
+                if (isset($inventory['warehouse']) && $inventory['warehouse'] === '1' && isset($inventory['quantity'])) {
+                    $final_stock_quantity = max(0, floatval($inventory['quantity']));
+                    break;
+                }
+            }
+            wc_sspaa_log("SINGLE WAREHOUSE calculation for variation SKU {$variation_sku}: warehouse:1 final stock = {$final_stock_quantity}");
+        }
+        
+        // Update variation stock
+        update_post_meta($variation_id, '_stock', $final_stock_quantity);
+        
+        $stock_status = ($final_stock_quantity > 0) ? 'instock' : 'outofstock';
+        wc_update_product_stock_status($variation_id, $stock_status);
+        
+        $current_time = current_time('mysql');
+        update_post_meta($variation_id, '_wc_sspaa_last_sync', $current_time);
+        
+        wc_sspaa_log("Updated variation stock: SKU={$variation_sku}, Stock={$final_stock_quantity}, Status={$stock_status}");
+        
+        return true;
+    }
+    
+    /**
+     * Get current domain for domain-specific logic
+     *
+     * @return string Current domain
+     */
+    private function get_current_domain()
+    {
+        // Enhanced domain detection for cron context
+        if (!empty($_SERVER['HTTP_HOST'])) {
+            return strtolower(wp_unslash($_SERVER['HTTP_HOST']));
+        }
+        
+        // Fallback to WordPress site URL
+        $site_url = get_site_url();
+        $parsed_url = parse_url($site_url);
+        return strtolower($parsed_url['host'] ?? 'unknown');
+    }
+    
+    /**
+     * Get product variations with SKUs for a variable product (Task 1.4.6)
+     *
+     * @param int $product_id The variable product ID
+     * @return array Array of variation objects with ID and SKU
+     */
+    private function get_product_variations($product_id)
+    {
+        global $wpdb;
+        
+        // Get variations that have SKUs
+        $variations = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT p.ID, pm.meta_value as sku
+                FROM {$wpdb->posts} p
+                INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_sku'
+                WHERE p.post_parent = %d 
+                AND p.post_type = 'product_variation'
+                AND pm.meta_value != ''
+                AND pm.meta_value IS NOT NULL",
+                $product_id
+            )
+        );
+        
+        return $variations ? $variations : array();
+    }
+
+    /**
      * Update parent variable product stock status based on variations
      *
      * @param int $parent_id Parent product ID
@@ -417,24 +714,6 @@ class WC_SSPAA_Stock_Sync_Time_Col
         update_post_meta($parent_id, '_wc_sspaa_last_sync', $current_time);
         
         wc_sspaa_log("Updated parent product ID: {$parent_id} with total stock: {$total_stock}, Status: {$status_text}");
-    }
-
-    /**
-     * Get current domain for domain-specific logic
-     *
-     * @return string Current domain
-     */
-    private function get_current_domain()
-    {
-        // Enhanced domain detection for cron context
-        if (!empty($_SERVER['HTTP_HOST'])) {
-            return strtolower(wp_unslash($_SERVER['HTTP_HOST']));
-        }
-        
-        // Fallback to WordPress site URL
-        $site_url = get_site_url();
-        $parsed_url = parse_url($site_url);
-        return strtolower($parsed_url['host'] ?? 'unknown');
     }
 }
 

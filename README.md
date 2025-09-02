@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.5
+**Stable tag:** 1.4.6
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,22 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.6
+* **ENHANCED:** Implemented comprehensive variable product sync functionality for "Sync Stock" button (Task 1.4.6)
+* **NEW FEATURE:** Variable products now display "Sync All Variations (X)" button in WooCommerce admin product list
+* **INTELLIGENT:** Button only appears for variable products that have variations with SKUs
+* **COMPREHENSIVE:** When clicked, synchronises stock for all variations under the parent variable product
+* **CONSISTENT:** Applies same sync logic as simple products, including dual warehouse calculation for skywatcheraustralia.com.au
+* **SMART:** Automatically removes "Obsolete" status from variations during sync, same as simple products
+* **SECURE:** Implements proper transient locking to prevent concurrent variable product syncs
+* **OPTIMISED:** Maintains API rate limiting (7 calls per second) during variation sync
+* **DETAILED:** Comprehensive logging for variable product operations with variation-level detail
+* **INFORMATIVE:** Custom tooltip clearly explains dual functionality for variable products
+* **ROBUST:** Proper error handling and cleanup for variable product sync operations
+* **STATISTICS:** Returns detailed sync results including successful/failed variations and obsolete removals
+* **INTEGRATED:** Updates parent product stock status after all variations are synced
+* **COMPATIBLE:** Maintains backward compatibility with existing simple product sync functionality
 
 ### 1.4.5
 * **FIXED:** Resolved GTIN checker button and GTIN status functionality not working when clicked
