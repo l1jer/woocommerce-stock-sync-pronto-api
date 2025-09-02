@@ -37,9 +37,9 @@ define('WC_SSPAA_EXCLUDED_SKUS', array(
     '11074-XLT'
 ));
 
-// Define API rate limit settings (Task 1.4.3: Optimized for 10 calls/second API limit)
-define('WC_SSPAA_API_DELAY_MICROSECONDS', 142857); // ~0.143 seconds (7 calls/second with safety margin)
-define('WC_SSPAA_API_CALLS_PER_SECOND', 7);        // Target rate with 30% safety margin
+// Define API rate limit settings (Task 1.4.8: Updated to 5 calls/second for reduced load)
+define('WC_SSPAA_API_DELAY_MICROSECONDS', 200000); // 0.2 seconds (5 calls/second)
+define('WC_SSPAA_API_CALLS_PER_SECOND', 5);        // Target rate to preserve bandwidth
 
 function wc_sspaa_activate()
 {

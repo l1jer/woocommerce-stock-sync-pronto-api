@@ -19,6 +19,18 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 ## Changelog
 
 ### 1.4.7
+* **UPDATED:** API call throttling configuration reduced to 5 calls per second (Task 1.4.8)
+* **PERFORMANCE:** Changed from 7 calls/second to 5 calls/second to reduce load and preserve bandwidth
+* **CONSISTENT:** New delay (200,000 microseconds) applied across all sync operations
+* **COMPREHENSIVE:** Updated individual sync, bulk sync, variable product sync, scheduled sync, and GTIN sync
+* **OPTIMISED:** JavaScript countdown timer automatically uses new delay for accurate time estimation
+* **BANDWIDTH:** 28.6% reduction in API call frequency preserves bandwidth for other requests
+* **RELIABLE:** Maintains sync reliability while reducing server load
+* **CONFIGURABLE:** Centralized configuration via WC_SSPAA_API_DELAY_MICROSECONDS constant
+* **TESTED:** Thoroughly verified new delay is enforced across all sync operations
+* **IMPACT:** Acceptable 40% increase in sync time for significant bandwidth preservation
+
+### 1.4.7 (Original)
 * **NEW FEATURE:** Implemented intelligent fallback API system for enhanced reliability (Task 1.4.7)
 * **DUAL ENDPOINT:** Primary API (`userapi/json/product/v4_tasco.json`) with automatic fallback to secondary API (`api/json/product/v4.json`)
 * **SMART VALIDATION:** Sophisticated API response validation to determine when fallback is needed
