@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.7
+**Stable tag:** 1.4.8
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -18,7 +18,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 ## Changelog
 
-### 1.4.7
+### 1.4.8
 * **UPDATED:** API call throttling configuration reduced to 5 calls per second (Task 1.4.8)
 * **PERFORMANCE:** Changed from 7 calls/second to 5 calls/second to reduce load and preserve bandwidth
 * **CONSISTENT:** New delay (200,000 microseconds) applied across all sync operations
@@ -30,7 +30,7 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 * **TESTED:** Thoroughly verified new delay is enforced across all sync operations
 * **IMPACT:** Acceptable 40% increase in sync time for significant bandwidth preservation
 
-### 1.4.7 (Original)
+### 1.4.7
 * **NEW FEATURE:** Implemented intelligent fallback API system for enhanced reliability (Task 1.4.7)
 * **DUAL ENDPOINT:** Primary API (`userapi/json/product/v4_tasco.json`) with automatic fallback to secondary API (`api/json/product/v4.json`)
 * **SMART VALIDATION:** Sophisticated API response validation to determine when fallback is needed
