@@ -124,25 +124,43 @@ class WC_SSPAA_Stock_Updater
                     }
                     $this->log("Raw API response for SKU {$sku}: " . $loggable_response);
 
+                    // Task 1.4.9: Check both APIs before marking as obsolete
                     if (is_array($response) && 
                         isset($response['products']) && empty($response['products']) && 
                         isset($response['count']) && $response['count'] === 0 && 
                         isset($response['pages']) && $response['pages'] === 0) {
                         
-                        $this->log("Marking SKU {$sku} (Product ID: {$product_id}) as Obsolete due to empty API response.");
-                        update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
-                        update_post_meta($product_id, '_stock', 0);
-                        wc_update_product_stock_status($product_id, 'obsolete');
-                        update_post_meta($product_id, '_wc_sspaa_last_sync', current_time('mysql'));
-                        $this->log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt with 'obsolete' stock status. Stock set to 0.");
-                        $marked_obsolete++;
+                        $this->log("[Task 1.4.9] Primary API returned empty for SKU {$sku}. Checking obsolete status with both APIs.");
+                        $obsolete_check = $this->api_handler->check_obsolete_status($sku);
+                        
+                        if ($obsolete_check['is_obsolete']) {
+                            $this->log("[Task 1.4.9] Marking SKU {$sku} (Product ID: {$product_id}) as Obsolete. Reason: {$obsolete_check['reason']}");
+                            update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+                            update_post_meta($product_id, '_stock', 0);
+                            wc_update_product_stock_status($product_id, 'obsolete');
+                            update_post_meta($product_id, '_wc_sspaa_last_sync', current_time('mysql'));
+                            $this->log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt with 'obsolete' stock status. Stock set to 0.");
+                            $marked_obsolete++;
 
-                        if ($product_type === 'product_variation' && $parent_id > 0) {
-                            $this->log("Updating parent product (ID: {$parent_id}) due to variation (ID: {$product_id}) becoming obsolete.");
-                            $this->update_parent_product_stock($parent_id);
+                            if ($product_type === 'product_variation' && $parent_id > 0) {
+                                $this->log("Updating parent product (ID: {$parent_id}) due to variation (ID: {$product_id}) becoming obsolete.");
+                                $this->update_parent_product_stock($parent_id);
+                            }
+                        } else {
+                            $this->log("[Task 1.4.9] SKU {$sku} (Product ID: {$product_id}) NOT marked as obsolete. Reason: {$obsolete_check['reason']}");
+                            
+                            // If DEFAULT API has valid data, use it for stock sync
+                            if (isset($obsolete_check['default_response']['products']) && !empty($obsolete_check['default_response']['products'])) {
+                                $this->log("[Task 1.4.9] Using DEFAULT API data for stock sync for SKU {$sku}");
+                                $response = $obsolete_check['default_response'];
+                            } elseif (isset($obsolete_check['scs_response']['products']) && !empty($obsolete_check['scs_response']['products'])) {
+                                $this->log("[Task 1.4.9] Using SCS API data for stock sync for SKU {$sku}");
+                                $response = $obsolete_check['scs_response'];
+                            }
                         }
+                    }
 
-                    } elseif (isset($response['products']) && !empty($response['products'])) {
+                    if (isset($response['products']) && !empty($response['products'])) {
                         $this->log("Valid API response received for SKU {$sku} (Product ID: {$product_id}).");
                         if (get_post_meta($product_id, '_wc_sspaa_obsolete_exempt', true)) {
                             if (delete_post_meta($product_id, '_wc_sspaa_obsolete_exempt')) {

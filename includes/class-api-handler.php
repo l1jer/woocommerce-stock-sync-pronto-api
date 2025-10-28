@@ -51,6 +51,141 @@ class WC_SSPAA_API_Handler
     }
     
     /**
+     * Check if product should be marked as obsolete by querying both APIs (Task 1.4.9)
+     *
+     * @param string $sku The product SKU to check
+     * @return array Result with 'is_obsolete' boolean and 'scs_response'/'default_response' arrays
+     */
+    public function check_obsolete_status($sku)
+    {
+        wc_sspaa_log("[OBSOLETE CHECK] Starting obsolete status check for SKU: {$sku}");
+        
+        // Check SCS API first
+        $scs_result = $this->get_product_data_from_endpoint_with_credentials(
+            $sku, 
+            WCAP_API_URL, 
+            WCAP_API_USERNAME, 
+            WCAP_API_PASSWORD, 
+            'SCS'
+        );
+        
+        $scs_is_empty = $this->is_empty_product_response($scs_result);
+        wc_sspaa_log("[OBSOLETE CHECK] SCS API response for SKU {$sku}: " . ($scs_is_empty ? 'EMPTY' : 'HAS DATA'));
+        
+        // If SCS API has data, product is not obsolete
+        if (!$scs_is_empty) {
+            wc_sspaa_log("[OBSOLETE CHECK] SKU {$sku} is NOT obsolete - SCS API returned valid product data");
+            return array(
+                'is_obsolete' => false,
+                'scs_response' => $scs_result,
+                'default_response' => null,
+                'reason' => 'SCS API returned product data'
+            );
+        }
+        
+        // SCS API returned empty, now check DEFAULT API
+        wc_sspaa_log("[OBSOLETE CHECK] SCS API returned empty for SKU {$sku}, checking DEFAULT API");
+        
+        $default_result = $this->get_product_data_from_endpoint_with_credentials(
+            $sku, 
+            WCAP_API_URL_FALLBACK, 
+            WCAP_API_USERNAME_FALLBACK, 
+            WCAP_API_PASSWORD_FALLBACK, 
+            'DEFAULT'
+        );
+        
+        $default_is_empty = $this->is_empty_product_response($default_result);
+        wc_sspaa_log("[OBSOLETE CHECK] DEFAULT API response for SKU {$sku}: " . ($default_is_empty ? 'EMPTY' : 'HAS DATA'));
+        
+        // If DEFAULT API has data, product is not obsolete
+        if (!$default_is_empty) {
+            wc_sspaa_log("[OBSOLETE CHECK] SKU {$sku} is NOT obsolete - DEFAULT API returned valid product data");
+            return array(
+                'is_obsolete' => false,
+                'scs_response' => $scs_result,
+                'default_response' => $default_result,
+                'reason' => 'DEFAULT API returned product data'
+            );
+        }
+        
+        // Both APIs returned empty, product is obsolete
+        wc_sspaa_log("[OBSOLETE CHECK] SKU {$sku} IS OBSOLETE - Both SCS and DEFAULT APIs returned empty product arrays");
+        return array(
+            'is_obsolete' => true,
+            'scs_response' => $scs_result,
+            'default_response' => $default_result,
+            'reason' => 'Both APIs returned empty product arrays'
+        );
+    }
+    
+    /**
+     * Get product data from specific endpoint with explicit credentials (Task 1.4.9)
+     *
+     * @param string $sku The product SKU to fetch
+     * @param string $api_url API endpoint URL
+     * @param string $username API username
+     * @param string $password API password
+     * @param string $api_label Label for logging (e.g. 'SCS', 'DEFAULT')
+     * @return array|null Product data or null on error
+     */
+    private function get_product_data_from_endpoint_with_credentials($sku, $api_url, $username, $password, $api_label)
+    {
+        $context = (defined('DOING_CRON') && DOING_CRON) ? 'cron' : (is_admin() ? 'admin' : 'frontend');
+        $log_prefix = "[Context: $context] [{$api_label} API] [Username: {$username}] [Domain: " . ($_SERVER['HTTP_HOST'] ?? 'N/A') . "] ";
+        
+        $url = $api_url . '?code=' . urlencode($sku);
+        wc_sspaa_log($log_prefix . 'Requesting URL: ' . $url);
+        
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($username . ':' . $password)
+            ),
+            'timeout' => 30
+        ));
+        
+        if (is_wp_error($response)) {
+            wc_sspaa_log($log_prefix . 'API request failed: ' . $response->get_error_message());
+            return null;
+        }
+        
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        $loggable_body = strlen($body) > 500 ? substr($body, 0, 500) . '... (truncated)' : $body;
+        wc_sspaa_log($log_prefix . 'HTTP status: ' . $status_code . '; Raw response: ' . $loggable_body);
+        
+        $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wc_sspaa_log($log_prefix . 'JSON decode error: ' . json_last_error_msg());
+            return null;
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Check if API response indicates empty product array (Task 1.4.9)
+     *
+     * @param array|null $response API response data
+     * @return bool True if response is {"products":[],"count":0,"pages":0}
+     */
+    private function is_empty_product_response($response)
+    {
+        if (!is_array($response)) {
+            return false; // Null or invalid response is not the same as empty products
+        }
+        
+        return isset($response['products']) && 
+               is_array($response['products']) && 
+               empty($response['products']) &&
+               isset($response['count']) && 
+               $response['count'] === 0 &&
+               isset($response['pages']) && 
+               $response['pages'] === 0;
+    }
+    
+    /**
      * Get product data from specific API endpoint (Task 1.4.7)
      *
      * @param string $sku The product SKU to fetch

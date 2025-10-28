@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.8
+**Stable tag:** 1.4.9
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,20 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.9
+* **NEW FEATURE:** Implemented dual API obsolete checking system (Task 1.4.9)
+* **ENHANCED ACCURACY:** Products only marked as obsolete when BOTH SCS API and DEFAULT API return empty product arrays
+* **SMART VALIDATION:** Automatic checking against both APIs prevents false obsolete marking for products available in one system
+* **SEPARATE CREDENTIALS:** Uses distinct credentials for SCS API and DEFAULT API to ensure comprehensive checking
+* **COMPREHENSIVE LOGGING:** Detailed logging shows results from both APIs and final obsolete status decision
+* **CONTINUOUS VERIFICATION:** Obsolete-marked products re-checked during each daily sync to maintain status accuracy
+* **INTELLIGENT FALLBACK:** If DEFAULT API has valid data when SCS API is empty, product syncs normally rather than marking obsolete
+* **API CONFIGURATION:** Updated config.php with separate credentials for both SCS and DEFAULT APIs
+* **ENHANCED RELIABILITY:** Prevents premature obsolete marking due to temporary API issues or SCS configuration
+* **BACKWARD COMPATIBLE:** Existing obsolete products continue to be re-evaluated during each sync cycle
+* **PROFESSIONAL IMPLEMENTATION:** Clean, maintainable code following WordPress and WooCommerce best practices
+* **SECURE HANDLING:** All API credentials and endpoints properly secured and managed via config constants
 
 ### 1.4.8
 * **UPDATED:** API call throttling configuration reduced to 5 calls per second (Task 1.4.8)

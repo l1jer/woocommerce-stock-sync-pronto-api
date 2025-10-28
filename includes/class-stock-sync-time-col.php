@@ -274,28 +274,46 @@ class WC_SSPAA_Stock_Sync_Time_Col
             $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;
             wc_sspaa_log('Single Sync API Response for SKU ' . $sku . ': ' . $loggable_response);
             
+            // Task 1.4.9: Check both APIs before marking as obsolete (same logic as bulk sync)
             if (is_array($response) && 
                 isset($response['products']) && empty($response['products']) && 
                 isset($response['count']) && $response['count'] === 0 && 
                 isset($response['pages']) && $response['pages'] === 0) {
                 
-                update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
-                update_post_meta($product_id, '_stock', 0);
-                wc_update_product_stock_status($product_id, 'obsolete');
-                $current_time = current_time('mysql');
-                update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
-                wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt with 'obsolete' stock status during single sync. Stock set to 0.");
+                wc_sspaa_log("[Task 1.4.9] Primary API returned empty for SKU {$sku} in single sync. Checking obsolete status with both APIs.");
+                $obsolete_check = $api_handler->check_obsolete_status($sku);
+                
+                if ($obsolete_check['is_obsolete']) {
+                    wc_sspaa_log("[Task 1.4.9] Marking SKU {$sku} (Product ID: {$product_id}) as Obsolete in single sync. Reason: {$obsolete_check['reason']}");
+                    update_post_meta($product_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+                    update_post_meta($product_id, '_stock', 0);
+                    wc_update_product_stock_status($product_id, 'obsolete');
+                    $current_time = current_time('mysql');
+                    update_post_meta($product_id, '_wc_sspaa_last_sync', $current_time);
+                    wc_sspaa_log("SKU {$sku} (Product ID: {$product_id}) marked as Obsolete exempt with 'obsolete' stock status during single sync. Stock set to 0.");
 
-                if ($product_type === 'product_variation' && $parent_id > 0) {
-                    $this->update_parent_product_stock($parent_id);
+                    if ($product_type === 'product_variation' && $parent_id > 0) {
+                        $this->update_parent_product_stock($parent_id);
+                    }
+                    delete_transient($lock_transient_key);
+                    wp_send_json_success(array(
+                        'message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce'),
+                        'last_sync' => $current_time,
+                        'marked_obsolete' => true
+                    ));
+                    return;
+                } else {
+                    wc_sspaa_log("[Task 1.4.9] SKU {$sku} (Product ID: {$product_id}) NOT marked as obsolete in single sync. Reason: {$obsolete_check['reason']}");
+                    
+                    // If DEFAULT API has valid data, use it for stock sync
+                    if (isset($obsolete_check['default_response']['products']) && !empty($obsolete_check['default_response']['products'])) {
+                        wc_sspaa_log("[Task 1.4.9] Using DEFAULT API data for single stock sync for SKU {$sku}");
+                        $response = $obsolete_check['default_response'];
+                    } elseif (isset($obsolete_check['scs_response']['products']) && !empty($obsolete_check['scs_response']['products'])) {
+                        wc_sspaa_log("[Task 1.4.9] Using SCS API data for single stock sync for SKU {$sku}");
+                        $response = $obsolete_check['scs_response'];
+                    }
                 }
-                delete_transient($lock_transient_key);
-                wp_send_json_success(array(
-                    'message' => __('Product marked as Obsolete. Stock set to 0.', 'woocommerce'),
-                    'last_sync' => $current_time,
-                    'marked_obsolete' => true
-                ));
-                return;
             }
             
             if (isset($response['products']) && !empty($response['products'])) {
@@ -519,20 +537,38 @@ class WC_SSPAA_Stock_Sync_Time_Col
         $loggable_response = (strlen($raw_response_for_log) > 500) ? substr($raw_response_for_log, 0, 500) . '... (truncated)' : $raw_response_for_log;
         wc_sspaa_log("Variation Sync API Response for SKU {$variation_sku}: {$loggable_response}");
         
+        // Task 1.4.9: Check both APIs before marking variation as obsolete
         if (is_array($response) && 
             isset($response['products']) && empty($response['products']) && 
             isset($response['count']) && $response['count'] === 0 && 
             isset($response['pages']) && $response['pages'] === 0) {
             
-            // Mark variation as obsolete
-            update_post_meta($variation_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
-            update_post_meta($variation_id, '_stock', 0);
-            wc_update_product_stock_status($variation_id, 'obsolete');
-            $current_time = current_time('mysql');
-            update_post_meta($variation_id, '_wc_sspaa_last_sync', $current_time);
-            wc_sspaa_log("Variation SKU {$variation_sku} (ID: {$variation_id}) marked as Obsolete with 'obsolete' stock status. Stock set to 0.");
+            wc_sspaa_log("[Task 1.4.9] Primary API returned empty for variation SKU {$variation_sku}. Checking obsolete status with both APIs.");
+            $api_handler = new WC_SSPAA_API_Handler();
+            $obsolete_check = $api_handler->check_obsolete_status($variation_sku);
             
-            return true; // Consider this a successful sync (marked as obsolete)
+            if ($obsolete_check['is_obsolete']) {
+                wc_sspaa_log("[Task 1.4.9] Marking variation SKU {$variation_sku} (ID: {$variation_id}) as Obsolete. Reason: {$obsolete_check['reason']}");
+                update_post_meta($variation_id, '_wc_sspaa_obsolete_exempt', current_time('timestamp'));
+                update_post_meta($variation_id, '_stock', 0);
+                wc_update_product_stock_status($variation_id, 'obsolete');
+                $current_time = current_time('mysql');
+                update_post_meta($variation_id, '_wc_sspaa_last_sync', $current_time);
+                wc_sspaa_log("Variation SKU {$variation_sku} (ID: {$variation_id}) marked as Obsolete with 'obsolete' stock status. Stock set to 0.");
+                
+                return true; // Consider this a successful sync (marked as obsolete)
+            } else {
+                wc_sspaa_log("[Task 1.4.9] Variation SKU {$variation_sku} (ID: {$variation_id}) NOT marked as obsolete. Reason: {$obsolete_check['reason']}");
+                
+                // If DEFAULT API has valid data, use it for stock sync
+                if (isset($obsolete_check['default_response']['products']) && !empty($obsolete_check['default_response']['products'])) {
+                    wc_sspaa_log("[Task 1.4.9] Using DEFAULT API data for variation stock sync for SKU {$variation_sku}");
+                    $response = $obsolete_check['default_response'];
+                } elseif (isset($obsolete_check['scs_response']['products']) && !empty($obsolete_check['scs_response']['products'])) {
+                    wc_sspaa_log("[Task 1.4.9] Using SCS API data for variation stock sync for SKU {$variation_sku}");
+                    $response = $obsolete_check['scs_response'];
+                }
+            }
         }
         
         if (!is_array($response) || !isset($response['products']) || empty($response['products'])) {
