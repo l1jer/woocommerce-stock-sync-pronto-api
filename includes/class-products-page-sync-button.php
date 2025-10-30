@@ -571,16 +571,14 @@ class WC_SSPAA_Products_Page_Sync_Button {
                 $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
             }
 
-            // Get total count of products with SKUs (excluding obsolete exempt and excluded SKUs)
+            // Get total count of products with SKUs (Task 1.4.9: Include obsolete products for re-checking)
             $total_products = $wpdb->get_var(
                 "SELECT COUNT(DISTINCT p.ID) 
                 FROM {$wpdb->postmeta} pm
                 JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-                LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
                 WHERE pm.meta_key = '_sku' 
                 AND p.post_type IN ('product', 'product_variation')
                 AND pm.meta_value != ''
-                AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
                 {$excluded_skus_clause}"
             );
             
@@ -638,15 +636,14 @@ class WC_SSPAA_Products_Page_Sync_Button {
             $excluded_skus_clause = " AND pm.meta_value NOT IN ({$excluded_skus_list})";
         }
         
+        // Task 1.4.9: Include obsolete products for re-checking
         $product_count = $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID) 
             FROM {$wpdb->postmeta} pm
             JOIN {$wpdb->posts} p ON p.ID = pm.post_id
-            LEFT JOIN {$wpdb->postmeta} exempt ON exempt.post_id = p.ID AND exempt.meta_key = '_wc_sspaa_obsolete_exempt'
             WHERE pm.meta_key = '_sku' 
             AND p.post_type IN ('product', 'product_variation')
             AND pm.meta_value != ''
-            AND (exempt.meta_id IS NULL OR exempt.meta_value = '' OR exempt.meta_value = 0)
             {$excluded_skus_clause}"
         );
         

@@ -39,15 +39,13 @@ class WC_SSPAA_Stock_Updater
             $this->log("SKU Exclusion: The following SKUs are excluded from sync: " . implode(', ', WC_SSPAA_EXCLUDED_SKUS));
         }
 
-        // Fetch all products from WooCommerce that have SKUs, are not Obsolete exempt, and are not in excluded SKUs list
+        // Fetch all products from WooCommerce that have SKUs (Task 1.4.9: Include obsolete products for re-checking)
         $products_query = 
             "SELECT p.ID, pm_sku.meta_value AS sku, p.post_type, p.post_parent 
             FROM {$wpdb->posts} p
             INNER JOIN {$wpdb->postmeta} pm_sku ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
-            LEFT JOIN {$wpdb->postmeta} pm_obsolete ON p.ID = pm_obsolete.post_id AND pm_obsolete.meta_key = '_wc_sspaa_obsolete_exempt'
             WHERE p.post_type IN ('product', 'product_variation')
             AND pm_sku.meta_value != ''
-            AND (pm_obsolete.meta_id IS NULL OR pm_obsolete.meta_value = '' OR pm_obsolete.meta_value = 0) -- Exclude if Obsolete exempt meta exists and is not empty/zero
             {$excluded_skus_clause} -- Exclude specific SKUs from sync
             ORDER BY p.ID ASC";
         
@@ -61,14 +59,7 @@ class WC_SSPAA_Stock_Updater
         }
 
         $total_to_process = count($products);
-        // Get total count of all products with SKUs for logging context, including exempt ones
-        $total_all_sku_products = $wpdb->get_var(
-            "SELECT COUNT(p.ID) 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm_sku ON p.ID = pm_sku.post_id AND pm_sku.meta_key = '_sku'
-            WHERE p.post_type IN ('product', 'product_variation') AND pm_sku.meta_value != ''"
-        );
-        $this->log("Starting sync. Total products with SKUs (overall): {$total_all_sku_products}. Products to process (not Obsolete exempt): {$total_to_process}");
+        $this->log("Starting sync. Total products with SKUs to process: {$total_to_process} (Task 1.4.9: Includes obsolete products for re-checking)");
         
         $processed_count = 0;
         $successful_syncs = 0;
@@ -286,7 +277,7 @@ class WC_SSPAA_Stock_Updater
         } // End foreach
 
         $this->log("Exited main product processing loop.");
-        $this->log("Sync completed. Total with SKUs (overall): {$total_all_sku_products}, Processed (non-exempt): {$processed_count}, Successful: {$successful_syncs}, Failed/Other: {$failed_syncs}, Newly marked Obsolete: {$marked_obsolete}");
+        $this->log("Sync completed. Total processed: {$processed_count}, Successful: {$successful_syncs}, Failed/Other: {$failed_syncs}, Newly marked Obsolete: {$marked_obsolete}");
         update_option('wc_sspaa_last_sync_completion', current_time('mysql'));
     }
 

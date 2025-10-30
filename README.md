@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.9
+**Stable tag:** 1.4.9a
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,13 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.9a
+* **FIXED:** Daily sync and "Sync All Products" button now include obsolete products for re-checking (Task 1.4.9)
+* **CONTINUOUS VERIFICATION:** Obsolete-marked products are now re-evaluated against both APIs during every sync cycle
+* **ENHANCED ACCURACY:** Products can automatically transition from obsolete back to active if either API returns valid data
+* **QUERY OPTIMIZATION:** Removed obsolete exclusion from product queries to enable comprehensive re-checking
+* **CONSISTENT BEHAVIOR:** Applied to automated daily sync, manual "Sync All Products" button, and product count display
 
 ### 1.4.9
 * **NEW FEATURE:** Implemented dual API obsolete checking system (Task 1.4.9)
