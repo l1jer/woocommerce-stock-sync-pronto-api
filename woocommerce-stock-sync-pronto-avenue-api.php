@@ -96,8 +96,6 @@ function wc_sspaa_init()
     // Real-time checkout stock validation (Task 1.4.10)
     add_action('woocommerce_checkout_process', 'wc_sspaa_validate_checkout_stock');
 
-    // Inject popup JS on checkout page for low-stock notice (Task 1.4.10)
-    add_action('woocommerce_after_checkout_form', 'wc_sspaa_enqueue_checkout_stock_popup');
 }
 add_action('plugins_loaded', 'wc_sspaa_init');
 
@@ -626,62 +624,28 @@ function wc_sspaa_validate_checkout_stock() {
         wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=backorder_notice count=' . count($backorder_items));
     }
 
-    // Low-stock items without backorders: show a notice (warning popup) and store data for JS popup
+    // Low-stock items without backorders: warn inline but do NOT block checkout
     if (!empty($low_stock_items)) {
         $product_messages = array();
         foreach ($low_stock_items as $item) {
-            $product_messages[] = $item['name'] . ' — only ' . wc_stock_amount($item['available_stock']) . ' available (you have ' . $item['requested_qty'] . ' in your cart)';
+            if ($item['available_stock'] <= 0) {
+                $product_messages[] = $item['name'] . ' — currently out of stock (you have ' . $item['requested_qty'] . ' in your cart)';
+            } else {
+                $product_messages[] = $item['name'] . ' — only ' . wc_stock_amount($item['available_stock']) . ' available (you have ' . $item['requested_qty'] . ' in your cart)';
+            }
         }
 
-        $notice_text = 'Some items in your cart have insufficient stock: ' . implode('; ', $product_messages) . '. Please review your cart before proceeding.';
+        $notice_text = 'Warning: The following items have insufficient stock — ' . implode('; ', $product_messages) . '. Please reduce your quantities or remove these items before placing your order.';
 
-        // Use 'notice' type so WooCommerce renders it as a warning banner (not a blocking error)
+        // Use 'notice' type so WooCommerce renders it as an inline warning banner on the checkout page
         wc_add_notice($notice_text, 'notice');
 
-        // Store popup message in session for the JS popup injected via woocommerce_after_checkout_form
-        WC()->session->set('wc_sspaa_checkout_low_stock_popup', $product_messages);
-
         wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=low_stock_notice count=' . count($low_stock_items));
-    } else {
-        WC()->session->set('wc_sspaa_checkout_low_stock_popup', null);
     }
 
     if ($api_unreachable) {
         wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=allowed_api_failure');
     }
-}
-
-/**
- * Inject a simple JS popup on the checkout page when low-stock items are detected (Task 1.4.10)
- */
-function wc_sspaa_enqueue_checkout_stock_popup() {
-    if (!function_exists('WC') || !WC()->session) {
-        return;
-    }
-
-    $popup_items = WC()->session->get('wc_sspaa_checkout_low_stock_popup');
-    if (empty($popup_items) || !is_array($popup_items)) {
-        return;
-    }
-
-    $items_js = array();
-    foreach ($popup_items as $msg) {
-        $items_js[] = esc_js($msg);
-    }
-
-    $list_html = implode('\n• ', $items_js);
-    ?>
-    <script>
-    (function () {
-        var msg = "Stock Warning\n\nThe following items have limited stock:\n• <?php echo $list_html; ?>\n\nYou may still place the order if backorders are permitted.";
-        var banner = document.querySelector('.woocommerce-NoticeGroup-checkout, .woocommerce-notices-wrapper');
-        if (banner && banner.querySelector('.woocommerce-info')) {
-            window.alert(msg);
-        }
-    })();
-    </script>
-    <?php
-    WC()->session->set('wc_sspaa_checkout_low_stock_popup', null);
 }
 
 /**
