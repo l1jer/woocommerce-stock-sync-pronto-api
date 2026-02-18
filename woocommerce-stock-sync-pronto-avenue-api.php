@@ -2,7 +2,7 @@
 /*
 Plugin Name: WooCommerce Stock Sync with Pronto Avenue API
 Description: Integrates WooCommerce with an external API to automatically update product stock levels based on SKU codes. Fetches product data, matches SKUs, and updates stock levels, handling API rate limits and server execution time constraints with sequential processing. Now includes GTIN synchronisation from API APN field, daily log file management with 14-day retention, dual warehouse stock calculation for SkyWatcher Australia, optimized API usage for 10 calls/second performance, intelligent fallback API support for enhanced reliability, and dual API obsolete checking to ensure accurate product status across both SCS and DEFAULT APIs.
-Version: 1.4.9a
+Version: 1.4.10
 Author: Jerry Li
 */
 
@@ -10,6 +10,23 @@ Author: Jerry Li
 if (!defined('ABSPATH')) {
     exit;
 }
+
+// Include plugin update checker library
+require_once plugin_dir_path(__FILE__) . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+// Set up automatic updates from GitHub
+$wc_sspaa_update_checker = PucFactory::buildUpdateChecker(
+    'https://github.com/l1jer/woocommerce-stock-sync-pronto-api/',
+    __FILE__,
+    'woocommerce-stock-sync-pronto-avenue-api'
+);
+
+// Set the branch for updates (use 'main' or 'master' depending on your GitHub branch)
+$wc_sspaa_update_checker->setBranch('main');
+
+// Optional: If your GitHub repository is private, set access token
+// $wc_sspaa_update_checker->setAuthentication('your-github-token-here');
 
 // Include necessary files
 require_once plugin_dir_path(__FILE__) . 'includes/config.php'; // Include the config file for credentials
@@ -75,6 +92,12 @@ function wc_sspaa_init()
 
     // Customize the display of "Obsolete" status in the admin product list stock column
     add_filter('woocommerce_admin_stock_html', 'wc_sspaa_admin_stock_html_for_obsolete', 10, 2);
+
+    // Real-time checkout stock validation (Task 1.4.10)
+    add_action('woocommerce_checkout_process', 'wc_sspaa_validate_checkout_stock');
+
+    // Inject popup JS on checkout page for low-stock notice (Task 1.4.10)
+    add_action('woocommerce_after_checkout_form', 'wc_sspaa_enqueue_checkout_stock_popup');
 }
 add_action('plugins_loaded', 'wc_sspaa_init');
 
@@ -480,6 +503,330 @@ function wc_sspaa_admin_stock_html_for_obsolete($html, $product) {
         }
     }
     return $html;
+}
+
+/**
+ * Real-time checkout stock validation against SCS/DEFAULT APIs (Task 1.4.10)
+ *
+ * - Products with backorders allowed are warned but NOT blocked.
+ * - If both APIs are unreachable the order is allowed through; failure is logged.
+ * - Insufficient-stock notice is type 'notice' so WooCommerce does not block the
+ *   order form; a JS popup is added separately via wc_sspaa_enqueue_checkout_stock_popup().
+ */
+function wc_sspaa_validate_checkout_stock() {
+    if (!function_exists('WC') || !WC()->cart) {
+        return;
+    }
+
+    $cart_items = WC()->cart->get_cart();
+    if (empty($cart_items)) {
+        return;
+    }
+
+    $request_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('wc_sspaa_', true);
+    $store = wc_sspaa_get_current_site_domain();
+    $api_handler = new WC_SSPAA_API_Handler();
+    $sku_cache = array();
+    $low_stock_items = array();
+    $backorder_items = array();
+    $api_unreachable = false;
+
+    foreach ($cart_items as $cart_item) {
+        $product = $cart_item['data'] ?? null;
+        if (!$product || !is_a($product, 'WC_Product')) {
+            continue;
+        }
+
+        $sku = $product->get_sku();
+        $sku = is_string($sku) ? trim($sku) : '';
+        $quantity = isset($cart_item['quantity']) ? (int) $cart_item['quantity'] : 0;
+
+        // Skip products without a SKU; they cannot be validated against the API
+        if ($sku === '' || $quantity <= 0) {
+            continue;
+        }
+
+        $start_time = microtime(true);
+
+        if (!isset($sku_cache[$sku])) {
+            $api_result = $api_handler->get_product_data_for_checkout($sku, 10, array(
+                'request_id' => $request_id,
+                'store' => $store
+            ));
+
+            if ($api_result['status'] === 'ok') {
+                $available_stock = wc_sspaa_calculate_available_stock_from_api($api_result['data'], $sku, $store, $request_id);
+                $sku_cache[$sku] = array(
+                    'status' => 'ok',
+                    'available_stock' => $available_stock,
+                    'source' => $api_result['source']
+                );
+            } else {
+                $sku_cache[$sku] = array(
+                    'status' => 'unreachable',
+                    'available_stock' => null,
+                    'source' => null,
+                    'errors' => $api_result['errors']
+                );
+            }
+        }
+
+        $cache_entry = $sku_cache[$sku];
+        $duration_ms = (int) round((microtime(true) - $start_time) * 1000);
+
+        if ($cache_entry['status'] === 'unreachable') {
+            $api_unreachable = true;
+            $error_codes = isset($cache_entry['errors']) ? implode(',', $cache_entry['errors']) : 'unknown';
+            wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' cartQty=' . $quantity . ' apiStock=unknown result=allow_api_failure errors=' . $error_codes . ' durationMs=' . $duration_ms);
+            continue;
+        }
+
+        $available_stock = $cache_entry['available_stock'];
+
+        // Always sync stock to WooCommerce regardless of backorder status
+        wc_sspaa_sync_product_stock_from_api($product, $available_stock, $request_id, $store);
+
+        if ($available_stock >= $quantity) {
+            wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' cartQty=' . $quantity . ' apiStock=' . $available_stock . ' source=' . $cache_entry['source'] . ' result=ok durationMs=' . $duration_ms);
+            continue;
+        }
+
+        // Stock is lower than cart quantity
+        $allows_backorder = $product->backorders_allowed();
+
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' cartQty=' . $quantity . ' apiStock=' . $available_stock . ' source=' . $cache_entry['source'] . ' backorder=' . ($allows_backorder ? 'yes' : 'no') . ' result=' . ($allows_backorder ? 'warn_backorder' : 'insufficient') . ' durationMs=' . $duration_ms);
+
+        if ($allows_backorder) {
+            $backorder_items[] = array(
+                'name' => $product->get_name(),
+                'available_stock' => $available_stock,
+                'requested_qty' => $quantity,
+                'sku' => $sku
+            );
+        } else {
+            $low_stock_items[] = array(
+                'name' => $product->get_name(),
+                'available_stock' => $available_stock,
+                'requested_qty' => $quantity,
+                'sku' => $sku
+            );
+        }
+    }
+
+    // Backorder products: show a notice but do NOT block checkout
+    if (!empty($backorder_items)) {
+        $backorder_names = array();
+        foreach ($backorder_items as $item) {
+            $backorder_names[] = $item['name'] . ' (only ' . wc_stock_amount($item['available_stock']) . ' in stock, you ordered ' . $item['requested_qty'] . ')';
+        }
+        wc_add_notice(
+            'Note: The following items have limited stock and will be placed on backorder: ' . implode(', ', $backorder_names) . '.',
+            'notice'
+        );
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=backorder_notice count=' . count($backorder_items));
+    }
+
+    // Low-stock items without backorders: show a notice (warning popup) and store data for JS popup
+    if (!empty($low_stock_items)) {
+        $product_messages = array();
+        foreach ($low_stock_items as $item) {
+            $product_messages[] = $item['name'] . ' — only ' . wc_stock_amount($item['available_stock']) . ' available (you have ' . $item['requested_qty'] . ' in your cart)';
+        }
+
+        $notice_text = 'Some items in your cart have insufficient stock: ' . implode('; ', $product_messages) . '. Please review your cart before proceeding.';
+
+        // Use 'notice' type so WooCommerce renders it as a warning banner (not a blocking error)
+        wc_add_notice($notice_text, 'notice');
+
+        // Store popup message in session for the JS popup injected via woocommerce_after_checkout_form
+        WC()->session->set('wc_sspaa_checkout_low_stock_popup', $product_messages);
+
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=low_stock_notice count=' . count($low_stock_items));
+    } else {
+        WC()->session->set('wc_sspaa_checkout_low_stock_popup', null);
+    }
+
+    if ($api_unreachable) {
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' result=allowed_api_failure');
+    }
+}
+
+/**
+ * Inject a simple JS popup on the checkout page when low-stock items are detected (Task 1.4.10)
+ */
+function wc_sspaa_enqueue_checkout_stock_popup() {
+    if (!function_exists('WC') || !WC()->session) {
+        return;
+    }
+
+    $popup_items = WC()->session->get('wc_sspaa_checkout_low_stock_popup');
+    if (empty($popup_items) || !is_array($popup_items)) {
+        return;
+    }
+
+    $items_js = array();
+    foreach ($popup_items as $msg) {
+        $items_js[] = esc_js($msg);
+    }
+
+    $list_html = implode('\n• ', $items_js);
+    ?>
+    <script>
+    (function () {
+        var msg = "Stock Warning\n\nThe following items have limited stock:\n• <?php echo $list_html; ?>\n\nYou may still place the order if backorders are permitted.";
+        var banner = document.querySelector('.woocommerce-NoticeGroup-checkout, .woocommerce-notices-wrapper');
+        if (banner && banner.querySelector('.woocommerce-info')) {
+            window.alert(msg);
+        }
+    })();
+    </script>
+    <?php
+    WC()->session->set('wc_sspaa_checkout_low_stock_popup', null);
+}
+
+/**
+ * Calculate available stock from API response (Task 1.4.10)
+ *
+ * @param array $response API response data
+ * @param string $sku Product SKU
+ * @param string $store Store domain
+ * @param string $request_id Request ID for logging
+ * @return float Available stock quantity
+ */
+function wc_sspaa_calculate_available_stock_from_api($response, $sku, $store, $request_id) {
+    if (!isset($response['products'][0]) || !is_array($response['products'][0])) {
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' result=missing_product_data durationMs=0');
+        return 0;
+    }
+
+    $product_data = $response['products'][0];
+    if (!isset($product_data['inventory_quantities']) || !is_array($product_data['inventory_quantities'])) {
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' result=missing_inventory_quantities durationMs=0');
+        return 0;
+    }
+
+    $quantity = 0;
+    $is_skywatcher_domain = ($store === 'skywatcheraustralia.com.au');
+
+    if ($is_skywatcher_domain) {
+        $warehouse_1_qty = 0;
+        $warehouse_ab_qty = 0;
+
+        foreach ($product_data['inventory_quantities'] as $inventory) {
+            if (!isset($inventory['warehouse'], $inventory['quantity'])) {
+                continue;
+            }
+
+            if ($inventory['warehouse'] === '1') {
+                $warehouse_1_qty = (float) $inventory['quantity'];
+            } elseif ($inventory['warehouse'] === 'AB') {
+                $warehouse_ab_qty = (float) $inventory['quantity'];
+            }
+        }
+
+        $warehouse_1_final = max(0, $warehouse_1_qty);
+        $warehouse_ab_final = max(0, $warehouse_ab_qty);
+        $quantity = $warehouse_1_final + $warehouse_ab_final;
+    } else {
+        foreach ($product_data['inventory_quantities'] as $inventory) {
+            if (isset($inventory['warehouse'], $inventory['quantity']) && $inventory['warehouse'] === '1') {
+                $quantity = (float) $inventory['quantity'];
+                break;
+            }
+        }
+
+        if ($quantity < 0) {
+            $quantity = 0;
+        }
+    }
+
+    return $quantity;
+}
+
+/**
+ * Sync product stock to WooCommerce during checkout using the WC object API (Task 1.4.10)
+ *
+ * Uses WC_Product::set_stock_quantity() and set_stock_status() + save() so that
+ * WooCommerce object cache stays consistent. Write failures are appended to a
+ * dedicated error log in the plugin's logs/ directory.
+ *
+ * @param WC_Product $product Product instance (will be reloaded from DB to avoid stale state)
+ * @param float $available_stock API stock quantity
+ * @param string $request_id Request ID for logging
+ * @param string $store Store domain
+ * @return void
+ */
+function wc_sspaa_sync_product_stock_from_api($product, $available_stock, $request_id, $store) {
+    if (!is_a($product, 'WC_Product')) {
+        return;
+    }
+
+    if (!$product->managing_stock()) {
+        return;
+    }
+
+    $product_id = $product->get_id();
+    $sku = $product->get_sku();
+    $sku = is_string($sku) ? trim($sku) : '';
+
+    // Reload from DB to avoid operating on a stale in-memory object
+    $fresh = wc_get_product($product_id);
+    if (!$fresh) {
+        $error = '[CHECKOUT STOCK ERROR] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' productId=' . $product_id . ' error=wc_get_product_returned_false';
+        wc_sspaa_log($error);
+        wc_sspaa_log_checkout_error($error);
+        return;
+    }
+
+    try {
+        $new_status = ($available_stock > 0) ? 'instock' : 'outofstock';
+        $fresh->set_stock_quantity($available_stock);
+        $fresh->set_stock_status($new_status);
+        $save_result = $fresh->save();
+
+        if (!$save_result) {
+            $error = '[CHECKOUT STOCK ERROR] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' productId=' . $product_id . ' error=product_save_returned_zero';
+            wc_sspaa_log($error);
+            wc_sspaa_log_checkout_error($error);
+            return;
+        }
+
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' productId=' . $product_id . ' apiStock=' . $available_stock . ' newStatus=' . $new_status . ' result=stock_synced');
+    } catch (Exception $e) {
+        $error = '[CHECKOUT STOCK ERROR] requestId=' . $request_id . ' store=' . $store . ' sku=' . $sku . ' productId=' . $product_id . ' exception=' . $e->getMessage();
+        wc_sspaa_log($error);
+        wc_sspaa_log_checkout_error($error);
+    }
+}
+
+/**
+ * Append a message to the dedicated checkout-error log file in the plugin logs/ directory (Task 1.4.10)
+ *
+ * File: logs/wc-sspaa-checkout-errors.log
+ * This file is separate from the daily sync log so checkout errors are easy to isolate.
+ *
+ * @param string $message Error message to append
+ * @return void
+ */
+function wc_sspaa_log_checkout_error($message) {
+    $logs_dir = plugin_dir_path(__FILE__) . 'logs';
+
+    if (!file_exists($logs_dir)) {
+        wp_mkdir_p($logs_dir);
+    }
+
+    $error_log_file = $logs_dir . '/wc-sspaa-checkout-errors.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $entry = '[' . $timestamp . '] ' . $message . PHP_EOL;
+
+    if (!file_exists($error_log_file)) {
+        touch($error_log_file);
+        chmod($error_log_file, 0644);
+    }
+
+    if (is_writable($error_log_file) || is_writable($logs_dir)) {
+        file_put_contents($error_log_file, $entry, FILE_APPEND | LOCK_EX);
+    }
 }
 
 // Deactivate the plugin and clear scheduled events

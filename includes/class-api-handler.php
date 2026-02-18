@@ -117,6 +117,186 @@ class WC_SSPAA_API_Handler
             'reason' => 'Both APIs returned empty product arrays'
         );
     }
+
+    /**
+     * Get product data for checkout stock validation with fallback logic (Task 1.4.10)
+     *
+     * @param string $sku The product SKU to fetch
+     * @param int $timeout Timeout in seconds for API requests
+     * @param array $context Log context (request_id, store)
+     * @return array Result with status, data, source, and errors
+     */
+    public function get_product_data_for_checkout($sku, $timeout = 10, $context = array())
+    {
+        $context = wp_parse_args($context, array(
+            'request_id' => '',
+            'store' => ''
+        ));
+
+        $scs_result = $this->request_product_data_for_checkout(
+            $sku,
+            WCAP_API_URL,
+            WCAP_API_USERNAME,
+            WCAP_API_PASSWORD,
+            'SCS',
+            $timeout,
+            $context
+        );
+
+        if ($this->is_checkout_response_valid($scs_result['data'])) {
+            if ($this->is_empty_product_response($scs_result['data'])) {
+                wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $context['request_id'] . ' store=' . $context['store'] . ' sku=' . $sku . ' api=SCS result=empty_products action=fallback_to_default durationMs=0');
+
+                $default_result = $this->request_product_data_for_checkout(
+                    $sku,
+                    WCAP_API_URL_FALLBACK,
+                    WCAP_API_USERNAME_FALLBACK,
+                    WCAP_API_PASSWORD_FALLBACK,
+                    'DEFAULT',
+                    $timeout,
+                    $context
+                );
+
+                if ($this->is_checkout_response_valid($default_result['data'])) {
+                    return array(
+                        'status' => 'ok',
+                        'data' => $default_result['data'],
+                        'source' => 'DEFAULT',
+                        'errors' => array()
+                    );
+                }
+
+                return array(
+                    'status' => 'ok',
+                    'data' => $scs_result['data'],
+                    'source' => 'SCS',
+                    'errors' => array_filter(array($default_result['error'] ?? null))
+                );
+            }
+
+            return array(
+                'status' => 'ok',
+                'data' => $scs_result['data'],
+                'source' => 'SCS',
+                'errors' => array()
+            );
+        }
+
+        $default_result = $this->request_product_data_for_checkout(
+            $sku,
+            WCAP_API_URL_FALLBACK,
+            WCAP_API_USERNAME_FALLBACK,
+            WCAP_API_PASSWORD_FALLBACK,
+            'DEFAULT',
+            $timeout,
+            $context
+        );
+
+        if ($this->is_checkout_response_valid($default_result['data'])) {
+            return array(
+                'status' => 'ok',
+                'data' => $default_result['data'],
+                'source' => 'DEFAULT',
+                'errors' => array_filter(array($scs_result['error'] ?? null))
+            );
+        }
+
+        return array(
+            'status' => 'unreachable',
+            'data' => null,
+            'source' => null,
+            'errors' => array_filter(array($scs_result['error'] ?? null, $default_result['error'] ?? null))
+        );
+    }
+
+    /**
+     * Request product data for checkout with minimal logging (Task 1.4.10)
+     *
+     * @param string $sku The product SKU to fetch
+     * @param string $api_url API endpoint URL
+     * @param string $username API username
+     * @param string $password API password
+     * @param string $api_label Label for logging (SCS/DEFAULT)
+     * @param int $timeout Timeout in seconds
+     * @param array $context Log context
+     * @return array Result with data, error, and timing details
+     */
+    private function request_product_data_for_checkout($sku, $api_url, $username, $password, $api_label, $timeout, $context)
+    {
+        $start_time = microtime(true);
+        $url = $api_url . '?code=' . urlencode($sku);
+
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'Authorization' => 'Basic ' . base64_encode($username . ':' . $password)
+            ),
+            'timeout' => $timeout
+        ));
+
+        $duration_ms = (int) round((microtime(true) - $start_time) * 1000);
+
+        if (is_wp_error($response)) {
+            wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $context['request_id'] . ' store=' . $context['store'] . ' sku=' . $sku . ' api=' . $api_label . ' result=error durationMs=' . $duration_ms . ' error=' . $response->get_error_message());
+            return array(
+                'data' => null,
+                'error' => 'wp_error',
+                'http_status' => null,
+                'duration_ms' => $duration_ms
+            );
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code < 200 || $status_code >= 300) {
+            wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $context['request_id'] . ' store=' . $context['store'] . ' sku=' . $sku . ' api=' . $api_label . ' result=error durationMs=' . $duration_ms . ' httpStatus=' . $status_code);
+            return array(
+                'data' => null,
+                'error' => 'http_status_' . $status_code,
+                'http_status' => $status_code,
+                'duration_ms' => $duration_ms
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $context['request_id'] . ' store=' . $context['store'] . ' sku=' . $sku . ' api=' . $api_label . ' result=error durationMs=' . $duration_ms . ' error=invalid_json');
+            return array(
+                'data' => null,
+                'error' => 'invalid_json',
+                'http_status' => $status_code,
+                'duration_ms' => $duration_ms
+            );
+        }
+
+        $products_count = 0;
+        if (isset($data['products']) && is_array($data['products'])) {
+            $products_count = count($data['products']);
+        }
+
+        wc_sspaa_log('[CHECKOUT STOCK] requestId=' . $context['request_id'] . ' store=' . $context['store'] . ' sku=' . $sku . ' api=' . $api_label . ' result=success durationMs=' . $duration_ms . ' productsCount=' . $products_count);
+
+        return array(
+            'data' => $data,
+            'error' => null,
+            'http_status' => $status_code,
+            'duration_ms' => $duration_ms
+        );
+    }
+
+    /**
+     * Validate checkout API response structure (Task 1.4.10)
+     *
+     * @param array|null $response API response data
+     * @return bool True if response is usable for checkout validation
+     */
+    private function is_checkout_response_valid($response)
+    {
+        if (!is_array($response)) {
+            return false;
+        }
+
+        return isset($response['products']) && is_array($response['products']);
+    }
     
     /**
      * Get product data from specific endpoint with explicit credentials (Task 1.4.9)

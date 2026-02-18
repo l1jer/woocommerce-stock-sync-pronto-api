@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.9a
+**Stable tag:** 1.4.10
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,14 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.10
+* **NEW FEATURE:** Real-time checkout stock validation against SCS API with DEFAULT fallback (Task 1.4.10)
+* **USER SAFETY:** Checkout is blocked with clear messaging when API stock is lower than cart quantity
+* **GRACEFUL FAILURE:** Orders proceed if both APIs are unreachable, with logged failure for review
+* **PERFORMANCE:** Per-request SKU caching to minimise duplicate API calls during checkout
+* **LOGGING:** Structured checkout stock logs include SKU, cart quantity, API stock, and validation result
+* **SYNC:** Checkout validation now updates WooCommerce stock quantities from the API response
 
 ### 1.4.9a
 * **FIXED:** Daily sync and "Sync All Products" button now include obsolete products for re-checking (Task 1.4.9)
