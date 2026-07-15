@@ -51,7 +51,8 @@ define('WC_SSPAA_EXCLUDED_SKUS', array(
     '91523',
     '91530', 
     '91531',
-    '11074-XLT'
+    '11074-XLT',
+    ‘11073-XLT’
 ));
 
 // Define API rate limit settings (Task 1.4.8: Updated to 5 calls/second for reduced load)
