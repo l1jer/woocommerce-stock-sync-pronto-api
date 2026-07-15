@@ -5,7 +5,7 @@
 **Requires at least:** 3.6
 **Requires PHP:** 5.3
 **Tested up to:** 6.4
-**Stable tag:** 1.4.10
+**Stable tag:** 1.4.11
 **License:** GPLv2
 **License URI:** [http://www.gnu.org/licenses/gpl-2.0.html](http://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -17,6 +17,9 @@ WooCommerce Stock Sync with Pronto Avenue API helps you keep your WooCommerce st
 
 
 ## Changelog
+
+### 1.4.11
+* **FIXED:** Fatal error "Undefined constant" caused by typographic (curly) quotes around SKU 11073-XLT in the WC_SSPAA_EXCLUDED_SKUS exclusion list; replaced with straight single quotes so the SKU is correctly excluded from sync
 
 ### 1.4.10
 * **NEW FEATURE:** Real-time checkout stock validation against SCS API with DEFAULT fallback (Task 1.4.10)
